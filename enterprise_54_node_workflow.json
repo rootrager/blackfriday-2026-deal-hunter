@@ -4,32 +4,23 @@
   "nodes": [
     {
       "id": "bf26-s1-t1",
-      "name": "T1. Schedule (Every 20m)",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
+      "name": "T1. Manual Trigger (Instant 1-Click)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
       "position": [
         80,
         120
       ],
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 20
-            }
-          ]
-        }
-      }
+      "parameters": {}
     },
     {
       "id": "bf26-s1-t2",
-      "name": "T2. Manual Live Test Webhook",
+      "name": "T3. Live Test Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
         80,
-        300
+        400
       ],
       "webhookId": "bf2026-live-scan-hook",
       "parameters": {
@@ -41,12 +32,12 @@
     },
     {
       "id": "bf26-s1-t3",
-      "name": "T3. Emergency Reset Webhook",
+      "name": "T4. Emergency Reset Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
         80,
-        480
+        540
       ],
       "webhookId": "bf2026-emergency-reset-hook",
       "parameters": {
@@ -58,19 +49,19 @@
     },
     {
       "id": "bf26-s1-t4",
-      "name": "T4. Nightly Sync Cron",
+      "name": "T2. Schedule (Every 20m)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
         80,
-        660
+        260
       ],
       "parameters": {
         "rule": {
           "interval": [
             {
-              "field": "cronExpression",
-              "expression": "30 0 * * *"
+              "field": "minutes",
+              "minutesInterval": 20
             }
           ]
         }
@@ -1044,7 +1035,7 @@
     }
   ],
   "connections": {
-    "T1. Schedule (Every 20m)": {
+    "T1. Manual Trigger (Instant 1-Click)": {
       "main": [
         [
           {
@@ -1055,7 +1046,7 @@
         ]
       ]
     },
-    "T2. Manual Live Test Webhook": {
+    "T3. Live Test Webhook": {
       "main": [
         [
           {
@@ -1066,7 +1057,7 @@
         ]
       ]
     },
-    "T4. Nightly Sync Cron": {
+    "T2. Schedule (Every 20m)": {
       "main": [
         [
           {
@@ -1077,7 +1068,7 @@
         ]
       ]
     },
-    "T3. Emergency Reset Webhook": {
+    "T4. Emergency Reset Webhook": {
       "main": [
         [
           {
