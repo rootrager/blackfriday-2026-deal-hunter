@@ -1,0 +1,128 @@
+{
+  "name": "Black Friday 2026 - Arbitrage & Market Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "node-schedule",
+      "name": "Schedule Trigger (Every 30m)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "path": "arbitrage-check",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Manual Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step 1: Simulated / Real Live Feeds for Tech Hardware & Digital Services\nconst usdToToman = 110000; // Live USD/USDT Rate in Toman\nconst cnyToUsd = 0.14;     // Chinese Yuan to USD\n\nconst items = [\n  {\n    category: 'Digital Service',\n    name: 'Claude Pro (Monthly)',\n    source: 'suzhe.ai',\n    currency: 'CNY',\n    source_price: 135,\n    domestic_market_toman: 2450000,\n    settlement_type: 'Crypto (MetaMask USDT)'\n  },\n  {\n    category: 'Digital Service',\n    name: 'Cursor Pro (Annual Discount)',\n    source: 'suzhe.ai',\n    currency: 'USD',\n    source_price: 16,\n    domestic_market_toman: 2150000,\n    settlement_type: 'Crypto (MetaMask USDT)'\n  },\n  {\n    category: 'Hardware (Apple Accessory)',\n    name: 'Apple 20W USB-C Power Adapter (Original)',\n    source: 'Domestic Black Friday Campaign',\n    currency: 'TOMAN',\n    source_price: 1350000,\n    domestic_market_toman: 1850000,\n    settlement_type: 'Rial/Toman Gateway'\n  },\n  {\n    category: 'Gaming Hardware',\n    name: 'PS5 DualSense Controller',\n    source: 'Wholesale / Flash Sale',\n    currency: 'TOMAN',\n    source_price: 3650000,\n    domestic_market_toman: 4400000,\n    settlement_type: 'Rial/Toman Gateway'\n  }\n];\n\nreturn items.map(item => {\n  let costToman = 0;\n  if (item.currency === 'TOMAN') {\n    costToman = item.source_price;\n  } else if (item.currency === 'USD') {\n    costToman = item.source_price * usdToToman;\n  } else if (item.currency === 'CNY') {\n    costToman = (item.source_price * cnyToUsd) * usdToToman;\n  }\n  \n  const netProfitToman = item.domestic_market_toman - costToman;\n  const marginPercent = ((netProfitToman / costToman) * 100).toFixed(1);\n  \n  return {\n    json: {\n      ...item,\n      cost_toman: Math.round(costToman),\n      domestic_market_toman: item.domestic_market_toman,\n      net_profit_toman: Math.round(netProfitToman),\n      margin_percent: parseFloat(marginPercent),\n      is_arbitrage_opportunity: marginPercent >= 20.0\n    }\n  };\n});"
+      },
+      "id": "node-calc",
+      "name": "Normalize Currency & Margin Calculation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-margin",
+              "leftValue": "={{ $json.is_arbitrage_opportunity }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-if",
+      "name": "Filter High-Margin Deals (>= 20%)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "const deal = $json;\nconst fa = (n) => Number(n || 0).toLocaleString('fa-IR');\n\nconst message = `🚨 *فرصت آربیتراژ بلک‌فرایدی شناسایی شد!*\\n\\n` +\n  `📦 *محصول:* ${deal.name}\\n` +\n  `🏷 *دسته‌بندی:* ${deal.category}\\n` +\n  `🌐 *منبع تأمین:* ${deal.source} (${deal.settlement_type})\\n\\n` +\n  `💰 *قیمت خرید (نرمال‌شده):* ${fa(deal.cost_toman)} تومان\\n` +\n  `📈 *قیمت کف بازار ایران:* ${fa(deal.domestic_market_toman)} تومان\\n` +\n  `💵 *سود خالص تخمینی:* ${fa(deal.net_profit_toman)} تومان\\n` +\n  `🚀 *حاشیه سود:* ${deal.margin_percent}%\\n\\n` +\n  `⚡ *وضعیت:* آماده برای خرید با MetaMask یا ثبت سفارش در استور.`;\n\nreturn [{ json: { formatted_alert: message, ...deal } }];"
+      },
+      "id": "node-format",
+      "name": "Format Telegram Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Every 30m)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Currency & Margin Calculation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Currency & Margin Calculation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Currency & Margin Calculation": {
+      "main": [
+        [
+          {
+            "node": "Filter High-Margin Deals (>= 20%)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter High-Margin Deals (>= 20%)": {
+      "main": [
+        [
+          {
+            "node": "Format Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

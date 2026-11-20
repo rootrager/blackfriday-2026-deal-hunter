@@ -1,0 +1,72 @@
+[
+  {
+    "id": "chatgpt-plus",
+    "name": "ChatGPT Plus (اکانت اختصاصی ماهانه)",
+    "category": "دیجیتال / هوش مصنوعی",
+    "source": "AIPAY99 (شبکه BEP20 با متامسک)",
+    "currency": "USDT",
+    "cost": 18.8,
+    "marketSellPriceToman": 5950000,
+    "networkFeeUsd": 0.15,
+    "costInToman": 5116500,
+    "netProfit": 833500,
+    "margin": 16.3,
+    "isDeal": true
+  },
+  {
+    "id": "claude-pro",
+    "name": "Claude Pro (اشتراک اختصاصی ماهانه)",
+    "category": "دیجیتال / هوش مصنوعی",
+    "source": "AIPAY99 / متامسک",
+    "currency": "USDT",
+    "cost": 25.5,
+    "marketSellPriceToman": 7900000,
+    "networkFeeUsd": 0.15,
+    "costInToman": 6925500,
+    "netProfit": 974500,
+    "margin": 14.1,
+    "isDeal": true
+  },
+  {
+    "id": "cursor-pro",
+    "name": "Cursor Pro (اشتراک توسعه‌دهندگان AI)",
+    "category": "دیجیتال / برنامه‌نویسی",
+    "source": "suzhe.ai / تأمین کریپتو",
+    "currency": "USDT",
+    "cost": 16,
+    "marketSellPriceToman": 5100000,
+    "networkFeeUsd": 0.15,
+    "costInToman": 4360500,
+    "netProfit": 739500,
+    "margin": 17,
+    "isDeal": true
+  },
+  {
+    "id": "apple-20w-charger",
+    "name": "شارژر ۲۰ وات اورجینال اپل (پارت B/A اصلی)",
+    "category": "فیزیکی / اکسسوری استور",
+    "source": "حراجی تأمین‌کننده بازار تهران / بلک‌فرایدی",
+    "currency": "TOMAN",
+    "cost": 1320000,
+    "marketSellPriceToman": 1850000,
+    "networkFeeUsd": 0,
+    "costInToman": 1320000,
+    "netProfit": 530000,
+    "margin": 40.2,
+    "isDeal": true
+  },
+  {
+    "id": "ps5-dualsense",
+    "name": "دسته پلی‌استیشن ۵ DualSense (سفید/مشکی)",
+    "category": "فیزیکی / گیمینگ",
+    "source": "فلش‌سیل داخلی",
+    "currency": "TOMAN",
+    "cost": 3650000,
+    "marketSellPriceToman": 4400000,
+    "networkFeeUsd": 0,
+    "costInToman": 3650000,
+    "netProfit": 750000,
+    "margin": 20.5,
+    "isDeal": true
+  }
+]

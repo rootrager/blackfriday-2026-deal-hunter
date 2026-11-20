@@ -1,0 +1,408 @@
+{
+  "updatedAt": "2026-11-20T08:53:15.502Z",
+  "createdAt": "2026-11-19T21:03:33.327Z",
+  "id": "Djf8d0h5UanjPQd9",
+  "name": "Black Friday 2026 Deal Hunter",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 25
+            }
+          ]
+        }
+      },
+      "id": "38a7aae8-87a8-42d5-8f91-66789d13bde6",
+      "name": "Every 25 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -64,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://172.17.0.1:3100/mcp/tgju",
+        "tool": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tj_category_table"
+        },
+        "inputMode": "json",
+        "jsonInput": "{ \"category\": \"currency\", \"limit\": 25 }",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "15c4cea7-0077-4443-8b93-ed992b4f015e",
+      "name": "Get USD Rate (tgju)",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.1,
+      "position": [
+        256,
+        -16
+      ],
+      "executeOnce": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Target products scanned on every run. Edit queries here.\nconst targets = [\n { key: 'apple_20w', name_fa: 'آداپتور ۲۰ وات اپل', torob_query: 'آداپتور 20 وات اپل اصلی', torob_condition: 'new', shop_query: 'آداپتور 20 وات اپل', divar_query: 'آداپتور 20 وات اپل اصلی', divar_category: null },\n { key: 'dualsense', name_fa: 'دسته PS5 DualSense', torob_query: 'دسته dualsense ps5', torob_condition: 'new', shop_query: 'دسته بازی DualSense PS5', divar_query: 'دسته dualsense', divar_category: null },\n { key: 'nvme_1tb', name_fa: 'اساسدی NVMe یک ترابایت', torob_query: 'ssd nvme 1tb', torob_condition: 'new', shop_query: 'اس اس دی NVMe 1 ترابایت', divar_query: 'ssd nvme 1tb', divar_category: null },\n { key: 'used_iphone', name_fa: 'آیفون کارکرده تمیز', torob_query: 'آیفون 13 128 گیگابایت', torob_condition: 'used', shop_query: 'آیفون 13 128 گیگابایت', divar_query: 'آیفون 13 128 تمیز', divar_category: 'mobile-phones' },\n];\nreturn targets.map(t => ({ json: t }));"
+      },
+      "id": "a30b21ee-3520-4c49-ab47-0de79ea92406",
+      "name": "Build Target List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://172.17.0.1:3100/mcp/torob",
+        "tool": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tb_cheapest"
+        },
+        "inputMode": "json",
+        "jsonInput": "={{ JSON.stringify({ query: $(\"Build Target List\").item.json.torob_query, condition: $(\"Build Target List\").item.json.torob_condition, candidates: 3 }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "225a5d9b-01a7-4366-8537-e80b666eefaa",
+      "name": "Torob Market Baseline",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.1,
+      "position": [
+        624,
+        192
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://172.17.0.1:3100/mcp/digikala",
+        "tool": {
+          "__rl": true,
+          "mode": "id",
+          "value": "dk_find_cheapest"
+        },
+        "inputMode": "json",
+        "jsonInput": "={{ JSON.stringify({ query: $(\"Build Target List\").item.json.shop_query, pages: 2, limit: 5 }) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "17fae101-ab40-44a6-8a15-6632ee846aca",
+      "name": "Digikala Cheapest",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.1,
+      "position": [
+        752,
+        -240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://172.17.0.1:3100/mcp/technolife",
+        "tool": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tl_find_cheapest"
+        },
+        "inputMode": "json",
+        "jsonInput": "={{ JSON.stringify({ query: $(\"Build Target List\").item.json.shop_query, pages: 1, limit: 5 }) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "856bf496-15a7-488a-ae1b-409760811dc6",
+      "name": "Technolife Flash Prices",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.1,
+      "position": [
+        912,
+        176
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://172.17.0.1:3100/mcp/divar",
+        "tool": {
+          "__rl": true,
+          "mode": "id",
+          "value": "dv_search"
+        },
+        "inputMode": "json",
+        "jsonInput": "={{ JSON.stringify(Object.assign({ city: \"تهران\", query: $(\"Build Target List\").item.json.divar_query, max_age_hours: 24, sort: \"cheapest\", limit: 20 }, $(\"Build Target List\").item.json.divar_category ? { category: $(\"Build Target List\").item.json.divar_category } : {})) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "fbf9d242-2972-4287-9747-9df64bb286ef",
+      "name": "Divar Urgent Used Ads",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        16
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const MIN_MARGIN = 18;\nconst BUDGET = 100000000;\nconst DIVAR_FLOOR = 0.4;\nconst DEDUPE_HOURS = 6;\n\nfunction parseMcp(j) {\n if (!j || typeof j !== 'object') return {};\n if (Array.isArray(j.content)) {\n for (const c of j.content) {\n if (c && c.type === 'text' && typeof c.text === 'string') {\n try { return JSON.parse(c.text); } catch (e) {}\n }\n }\n }\n if (typeof j.text === 'string') { try { return JSON.parse(j.text); } catch (e) {} }\n if (j.result && typeof j.result === 'object') return parseMcp(j.result);\n return j;\n}\nconst toNum = v => { const n = Number(String(v ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) && n > 0 ? n : null; };\nconst fmt = n => Math.round(n).toLocaleString('en-US');\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\nlet usdToman = null;\ntry {\n const fx = parseMcp($('Get USD Rate (tgju)').first().json);\n const rows = fx.rows || fx.data || fx.prices || [];\n const usd = rows.find(r => /dollar/i.test(String(r.symbol || '')) || String(r.name || '').includes('دلار'));\n if (usd) usdToman = toNum(usd.price_toman ?? usd.toman ?? usd.price);\n} catch (e) {}\n\nconst targets = $('Build Target List').all();\nconst pick = (name, i) => { try { return parseMcp($(name).all()[i]?.json); } catch (e) { return {}; } };\nconst store = $getWorkflowStaticData('global');\nstore.alerted = store.alerted || {};\nconst now = Date.now();\nfor (const k of Object.keys(store.alerted)) if (now - store.alerted[k] > DEDUPE_HOURS * 3600e3) delete store.alerted[k];\n\nconst out = [];\ntargets.forEach((t, i) => {\n const target = t.json;\n const tb = pick('Torob Market Baseline', i);\n const picksArr = Array.isArray(tb.picks) ? tb.picks : [];\n const ref = picksArr.find(p => p && p.stats && toNum(p.stats.median)) || null;\n const market = ref ? toNum(ref.stats.median) : null;\n if (!market) return;\n\n const candidates = [];\n const dk = pick('Digikala Cheapest', i);\n for (const p of (dk.products || []).slice(0, 3)) {\n const cost = toNum(p.price);\n if (cost && p.in_stock !== false) candidates.push({ source: 'دیجیکالا', title: p.title, cost, before: toNum(p.price_before_discount), discount: p.discount_pct || 0, link: p.url, flash: p.deal_ends || null });\n }\n const tl = pick('Technolife Flash Prices', i);\n for (const p of (tl.products || []).slice(0, 3)) {\n const cost = toNum(p.final_price ?? p.price);\n if (cost && p.in_stock !== false) candidates.push({ source: 'تکنولایف', title: p.title, cost, before: toNum(p.price), discount: p.discount_pct || 0, link: p.url, flash: p.deal_ends || p.deal || null });\n }\n const dv = pick('Divar Urgent Used Ads', i);\n const ads = dv.ads || dv.results || dv.posts || [];\n for (const a of ads.slice(0, 20)) {\n const cost = toNum(a.price);\n if (cost && cost >= market * DIVAR_FLOOR) candidates.push({ source: 'دیوار (دست دوم)', title: a.title, cost, before: null, discount: 0, link: a.url, flash: a.tag || null });\n }\n\n for (const c of candidates) {\n const netProfit = market - c.cost;\n const margin = (netProfit / c.cost) * 100;\n const discountVerified = c.before ? c.before > c.cost : c.discount === 0;\n const isDeal = margin >= MIN_MARGIN && discountVerified && c.cost <= BUDGET;\n const dedupeKey = c.link + '|' + c.cost;\n const isNew = !store.alerted[dedupeKey];\n const units = Math.floor(BUDGET / c.cost);\n const message = [\n '🔥 <b>فرصت بلک فرایدی ۲۰۲۶</b>',\n '',\n '📦 <b>محصول:</b> ' + esc(target.name_fa),\n '🏷 <b>آگهی:</b> ' + esc(c.title),\n '🏪 <b>منبع:</b> ' + esc(c.source),\n '💰 <b>قیمت خرید:</b> ' + fmt(c.cost) + ' تومان',\n '📊 <b>قیمت بازار (میانه ترب):</b> ' + fmt(market) + ' تومان',\n '✅ <b>سود خالص:</b> ' + fmt(netProfit) + ' تومان',\n '📈 <b>حاشیه سود:</b> ' + margin.toFixed(1) + '٪',\n c.discount ? '🎯 <b>تخفیف اعلامی:</b> ' + c.discount + '٪' : '',\n usdToman ? '💵 <b>معادل دلاری خرید:</b> $' + (c.cost / usdToman).toFixed(1) + ' (دلار ' + fmt(usdToman) + ')' : '',\n '🧮 <b>حداکثر تعداد با بودجه:</b> ' + units + ' عدد',\n c.flash ? '⏳ <b>کمپین:</b> ' + esc(c.flash) : '',\n '',\n '🔗 <a href=\"' + esc(c.link) + '\">لینک خرید مستقیم</a>',\n ].filter(Boolean).join('\\n');\n if (isDeal && isNew) store.alerted[dedupeKey] = now;\n out.push({ json: {\n product_key: target.key, product_name: target.name_fa, listing_title: c.title, source: c.source,\n discounted_cost: c.cost, market_price: market, net_profit: netProfit,\n profit_margin_pct: Math.round(margin * 10) / 10, discount_verified: discountVerified,\n usd_toman: usdToman, buy_link: c.link, is_deal: isDeal, is_new_alert: isNew, message_fa: message,\n } });\n }\n});\nreturn out;"
+      },
+      "id": "018b8245-b553-490f-b004-764d555ee950",
+      "name": "Calculate Margins",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "margin-check",
+              "leftValue": "={{ $json.is_deal }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "new-alert-check",
+              "leftValue": "={{ $json.is_new_alert }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0754b20b-2870-462a-85ef-b4cd6143c150",
+      "name": "Is Deal (Margin >= 18%)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1408,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot9046211629:AAEAiY-o7utSsCAwUFz-MuVNS5_QoZAols8/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"7141177244\",\n  \"text\": .message_fa,\n  \"parse_mode\": \"HTML\",\n  \"disable_web_page_preview\": true,\n  \"reply_markup\": {\n    \"inline_keyboard\": [\n      [\n        {\n          \"text\": \"🛒 خرید مستقیم\",\n          \"url\": .buy_link\n        }\n      ]\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "d60d2cc4-006f-462a-93a3-1fec00ddbb5d",
+      "name": "Send Deal Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1744,
+        -32
+      ],
+      "webhookId": "177c8cc1-419d-4b35-8222-2fb01d9138a2",
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bf2026-deal-hunter-test",
+        "options": {}
+      },
+      "id": "2973efe3-0a2d-4194-9429-b17f494a0ee2",
+      "name": "Manual Test Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        384,
+        192
+      ],
+      "webhookId": "0247e739-2c6a-499f-9aa5-1e84c678440a"
+    }
+  ],
+  "connections": {
+    "Every 25 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get USD Rate (tgju)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get USD Rate (tgju)": {
+      "main": [
+        [
+          {
+            "node": "Build Target List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Target List": {
+      "main": [
+        [
+          {
+            "node": "Torob Market Baseline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Torob Market Baseline": {
+      "main": [
+        [
+          {
+            "node": "Digikala Cheapest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Digikala Cheapest": {
+      "main": [
+        [
+          {
+            "node": "Technolife Flash Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Technolife Flash Prices": {
+      "main": [
+        [
+          {
+            "node": "Divar Urgent Used Ads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Divar Urgent Used Ads": {
+      "main": [
+        [
+          {
+            "node": "Calculate Margins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Margins": {
+      "main": [
+        [
+          {
+            "node": "Is Deal (Margin >= 18%)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Deal (Margin >= 18%)": {
+      "main": [
+        [
+          {
+            "node": "Send Deal Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Test Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get USD Rate (tgju)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "97ab96c1-54d3-47c0-b2df-f8b6ffec76bd",
+  "activeVersionId": null,
+  "versionCounter": 23,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-11-19T21:03:33.334Z",
+      "createdAt": "2026-11-19T21:03:33.334Z",
+      "role": "workflow:owner",
+      "workflowId": "Djf8d0h5UanjPQd9",
+      "projectId": "a0U8DZvaapoktsph",
+      "project": {
+        "updatedAt": "2026-11-18T19:44:42.542Z",
+        "createdAt": "2026-11-16T20:53:10.620Z",
+        "id": "a0U8DZvaapoktsph",
+        "name": "mahdi zyaie <rootrag3r2@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "d013aed4-9a3c-49c8-b3f8-883e82756582"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
