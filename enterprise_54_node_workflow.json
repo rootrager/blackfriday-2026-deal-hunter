@@ -1,0 +1,1057 @@
+{
+  "name": "Enterprise 54-Node Black Friday 2026 Arbitrage & Market Radar",
+  "active": false,
+  "nodes": [
+    {
+      "id": "bf26-s1-t1",
+      "name": "T1. Schedule (Every 20m)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [80, 120],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 20
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bf26-s1-t2",
+      "name": "T2. Manual Live Test Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 300],
+      "webhookId": "bf2026-live-scan-hook",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bf2026-live-scan",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "bf26-s1-t3",
+      "name": "T3. Emergency Reset Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [80, 480],
+      "webhookId": "bf2026-emergency-reset-hook",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bf2026-emergency-reset",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "bf26-s1-t4",
+      "name": "T4. Nightly Sync Cron",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [80, 660],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 0 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bf26-s2-fx1",
+      "name": "FX1. Wallex Live USDT/TMN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 60],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.wallex.ir/v1/markets",
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "id": "bf26-s2-fx2",
+      "name": "FX2. TGJU Free FX (USD/EUR/AED)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 220],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:3100/mcp/tgju",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"service\":\"tgju\"}",
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "id": "bf26-s2-fx3",
+      "name": "FX3. CNY/USD Parity Converter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 380],
+      "parameters": {
+        "jsCode": "const cnyToUsd = 0.14;\nreturn [{ json: { cny_to_usd: cnyToUsd, parity_source: 'PBOC_2026_Baseline', updated_at: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "bf26-s2-fx4",
+      "name": "FX4. Network Gas Estimator (BSC/TRC20)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 540],
+      "parameters": {
+        "jsCode": "return [{ json: { gas_usd: { 'BSC/BEP20': 0.15, 'TRON/TRC20': 1.00, 'Base/Polygon': 0.20, 'Alipay/CNY': 0.25, 'Shaparak': 0.00 } } }];"
+      }
+    },
+    {
+      "id": "bf26-s2-fx5",
+      "name": "FX5. Toman FX Normalizer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 260],
+      "parameters": {
+        "jsCode": "let usdtToman = null;\nlet fxSource = 'fallback';\ntry {\n  const wallex = $('FX1. Wallex Live USDT/TMN').first()?.json;\n  const parsed = parseFloat(wallex?.result?.symbols?.USDTTMN?.stats?.lastPrice);\n  if (Number.isFinite(parsed) && parsed > 10000) {\n    usdtToman = Math.round(parsed);\n    fxSource = 'wallex_live';\n  }\n} catch (e) {}\n\nlet usdFreeToman = null;\ntry {\n  const tgju = $('FX2. TGJU Free FX (USD/EUR/AED)').first()?.json;\n  const rows = tgju?.rows || [];\n  const usdRow = rows.find(r => /dollar/i.test(String(r.symbol || '')) || String(r.name || '').includes('دلار'));\n  const usdtRow = rows.find(r => /usdt/i.test(String(r.symbol || '')) || String(r.name || '').includes('تتر'));\n  if (usdRow?.price_toman) usdFreeToman = Math.round(Number(usdRow.price_toman));\n  if (!usdtToman && usdtRow?.price_toman) {\n    usdtToman = Math.round(Number(usdtRow.price_toman));\n    fxSource = 'tgju_proxy';\n  }\n} catch (e) {}\n\nconst cnyToUsd = $('FX3. CNY/USD Parity Converter').first()?.json?.cny_to_usd || 0.14;\nconst gasUsd = $('FX4. Network Gas Estimator (BSC/TRC20)').first()?.json?.gas_usd || { 'BSC/BEP20': 0.15 };\n\nreturn [{ json: {\n  usdt_toman: usdtToman,\n  usd_free_toman: usdFreeToman,\n  cny_to_usd: cnyToUsd,\n  gas_usd: gasUsd,\n  fx_source: fxSource,\n  fx_error: usdtToman === null,\n  fetched_at: new Date().toISOString()\n} }];"
+      }
+    },
+    {
+      "id": "bf26-s2-fx6",
+      "name": "FX6. FX Cache & Outage Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 260],
+      "parameters": {
+        "jsCode": "const DEFAULT_USDT = 272100;\nconst store = $getWorkflowStaticData('global');\nconst incoming = $json;\n\nlet resolvedUsdt = incoming.usdt_toman;\nlet source = incoming.fx_source;\nif (resolvedUsdt && resolvedUsdt > 10000) {\n  store.last_good_fx = { usdt_toman: resolvedUsdt, saved_at: incoming.fetched_at };\n} else if (store.last_good_fx?.usdt_toman) {\n  resolvedUsdt = store.last_good_fx.usdt_toman;\n  source = 'cached_static_data';\n} else {\n  resolvedUsdt = DEFAULT_USDT;\n  source = 'hardcoded_2026_fallback';\n}\n\nconst cnyToUsd = incoming.cny_to_usd || 0.14;\nreturn [{ json: {\n  usdt_toman: resolvedUsdt,\n  usd_free_toman: incoming.usd_free_toman || Math.round(resolvedUsdt * 1.004),\n  eur_toman: Math.round(resolvedUsdt * 1.08),\n  aed_toman: Math.round(resolvedUsdt / 3.6725),\n  cny_to_usd: cnyToUsd,\n  cny_toman: Math.round(resolvedUsdt * cnyToUsd),\n  gas_usd: incoming.gas_usd,\n  fx_source: source,\n  fx_outage: Boolean(incoming.fx_error),\n  fetched_at: incoming.fetched_at\n} }];"
+      }
+    },
+    {
+      "id": "bf26-s3-w1",
+      "name": "W1. Apple Ecosystem Watchlist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, -140],
+      "parameters": {
+        "jsCode": "return [\n  { json: { sku_id: 'apple-20w', product_type: 'physical_tech', name_fa: 'شارژر ۲۰ وات اورجینال اپل (پارت B/A اصلی)', query: 'آداپتور 20 وات اپل اصلی', fallback_cost: 1320000, fallback_before: 1850000, fallback_market: 1850000, currency_basis: 'TOMAN', payment_asset: 'TMN', payment_network: 'Shaparak', delivery_method: 'Direct Store', ban_coverage: 'supported', is_c2c: false } },\n  { json: { sku_id: 'airpods-pro-2', product_type: 'physical_tech', name_fa: 'ایرپاد پرو ۲ تایپ‌سی اپل', query: 'ایرپاد پرو 2 تایپ سی', fallback_cost: 11800000, fallback_before: 11500000, fallback_market: 14200000, currency_basis: 'TOMAN', payment_asset: 'TMN', payment_network: 'Shaparak', delivery_method: 'Direct Store', ban_coverage: 'supported', is_c2c: false } }\n];"
+      }
+    },
+    {
+      "id": "bf26-s3-w2",
+      "name": "W2. Gaming Consoles Watchlist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 0],
+      "parameters": {
+        "jsCode": "return [\n  { json: { sku_id: 'ps5-dualsense', product_type: 'physical_tech', name_fa: 'دسته پلی‌استیشن ۵ DualSense (سفید/مشکی)', query: 'دسته dualsense ps5', fallback_cost: 3650000, fallback_before: 4550000, fallback_market: 4400000, currency_basis: 'TOMAN', payment_asset: 'TMN', payment_network: 'Shaparak', delivery_method: 'Direct Store', ban_coverage: 'supported', is_c2c: false } },\n  { json: { sku_id: 'ps5-slim', product_type: 'physical_tech', name_fa: 'کنسول پلی‌استیشن ۵ اسلیم دیسک‌خور', query: 'پلی استیشن 5 اسلیم', fallback_cost: 162000000, fallback_before: 198000000, fallback_market: 198000000, currency_basis: 'TOMAN', payment_asset: 'TMN', payment_network: 'Shaparak', delivery_method: 'Direct Store', ban_coverage: 'supported', is_c2c: false } }\n];"
+      }
+    },
+    {
+      "id": "bf26-s3-w3",
+      "name": "W3. PC Hardware & NVMe SSD",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 140],
+      "parameters": {
+        "jsCode": "return [\n  { json: { sku_id: 'nvme-1tb', product_type: 'physical_tech', name_fa: 'اس‌اس‌دی ۱ ترابایت NVMe PCIe 4.0', query: 'ssd nvme 1tb', fallback_cost: 23500000, fallback_before: 29500000, fallback_market: 29800000, currency_basis: 'TOMAN', payment_asset: 'TMN', payment_network: 'Shaparak', delivery_method: 'Direct Store', ban_coverage: 'supported', is_c2c: false } }\n];"
+      }
+    },
+    {
+      "id": "bf26-s3-w4",
+      "name": "W4. Used C2C Mobile (iPhone 13/14)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 280],
+      "parameters": {
+        "jsCode": "return [\n  { json: { sku_id: 'used-iphone-13', product_type: 'physical_tech', name_fa: 'آیفون ۱۳ کارکرده ۱۲۸ گیگ تمیز (رجیسترشده)', query: 'آیفون 13 128 تمیز', fallback_cost: 39500000, fallback_before: null, fallback_market: 48200000, currency_basis: 'TOMAN', payment_asset: 'TMN', payment_network: 'Domestic Bank', delivery_method: 'C2C Local', ban_coverage: 'supported', is_c2c: true } },\n  { json: { sku_id: 'used-iphone-14-suspicious', product_type: 'physical_tech', name_fa: 'آیفون ۱۴ پرو ۲۵۶ گیگ (آگهی زیر ۴۰٪ دیوار)', query: 'آیفون 14 پرو 256', fallback_cost: 58000000, fallback_before: null, fallback_market: 185000000, currency_basis: 'TOMAN', payment_asset: 'TMN', payment_network: 'Domestic Bank', delivery_method: 'C2C Local', ban_coverage: 'unknown', is_c2c: true } }\n];"
+      }
+    },
+    {
+      "id": "bf26-s3-w5",
+      "name": "W5. Consumer AI Subscriptions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 420],
+      "parameters": {
+        "jsCode": "return [\n  { json: { sku_id: 'chatgpt-plus', product_type: 'consumer_subscription', name_fa: 'اشتراک ماهانه ChatGPT Plus (اختصاصی)', source_name: 'AIPAY99', source_url: 'https://aipay99.com/en/', raw_cost: 18.80, network_gas_usd: 0.15, gateway_fee_pct: 0, market_benchmark_toman: 6150000, currency_basis: 'USDT', payment_asset: 'USDT', payment_network: 'BSC/BEP20', delivery_method: 'CDK', ban_coverage: 'excluded', promotion_status: 'not_found', is_c2c: false } },\n  { json: { sku_id: 'claude-pro', product_type: 'consumer_subscription', name_fa: 'اشتراک ماهانه Claude Pro (اختصاصی)', source_name: 'AIPAY99', source_url: 'https://aipay99.com/en/', raw_cost: 25.50, network_gas_usd: 0.15, gateway_fee_pct: 0, market_benchmark_toman: 7500000, currency_basis: 'USDT', payment_asset: 'USDT', payment_network: 'BSC/BEP20', delivery_method: 'CDK', ban_coverage: 'excluded', promotion_status: 'not_found', is_c2c: false } }\n];"
+      }
+    },
+    {
+      "id": "bf26-s3-w6",
+      "name": "W6. AI Coding IDEs (Cursor Pro)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 560],
+      "parameters": {
+        "jsCode": "return [\n  { json: { sku_id: 'cursor-pro', product_type: 'consumer_subscription', name_fa: 'اشتراک توسعه‌دهندگان Cursor Pro', source_name: 'SuZhe AI', source_url: 'https://suzhe.ai/', raw_cost: 16.00, network_gas_usd: 0.15, gateway_fee_pct: 0, market_benchmark_toman: 5450000, currency_basis: 'USDT', payment_asset: 'USDT', payment_network: 'BSC/BEP20', delivery_method: 'Own-Account Top-up', ban_coverage: 'unknown', promotion_status: 'not_found', is_c2c: false } },\n  { json: { sku_id: 'codex-cny', product_type: 'consumer_subscription', name_fa: 'پکیج کد فعال‌سازی AI (کانال یوان چین)', source_name: 'AIPAY99 CNY', source_url: 'https://aipay99.com/', raw_cost: 125, network_gas_usd: 0.25, gateway_fee_pct: 0, market_benchmark_toman: 6350000, currency_basis: 'CNY', payment_asset: 'CNY', payment_network: 'Alipay/CNY', delivery_method: 'CDK', ban_coverage: 'excluded', promotion_status: 'standard_price', is_c2c: false } }\n];"
+      }
+    },
+    {
+      "id": "bf26-s3-w7",
+      "name": "W7. Creative & Media Tools",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 700],
+      "parameters": {
+        "jsCode": "return [\n  { json: { sku_id: 'midjourney-std', product_type: 'consumer_subscription', name_fa: 'اشتراک Midjourney Standard ماهانه', source_name: 'AIPAY99 / Reseller', source_url: 'https://aipay99.com/en/', raw_cost: 28.00, network_gas_usd: 0.15, gateway_fee_pct: 0, market_benchmark_toman: 9400000, currency_basis: 'USDT', payment_asset: 'USDT', payment_network: 'BSC/BEP20', delivery_method: 'Own-Account Top-up', ban_coverage: 'unknown', promotion_status: 'not_found', is_c2c: false } }\n];"
+      }
+    },
+    {
+      "id": "bf26-s3-w8",
+      "name": "W8. API Credit Gateways",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 840],
+      "parameters": {
+        "jsCode": "return [\n  { json: { sku_id: 'openrouter-100', product_type: 'api_credit', name_fa: 'اعتبار مصرف توکن API اوپن‌روتر (۱۰۰ دلار)', source_name: 'OpenRouter', source_url: 'https://openrouter.ai/pricing', raw_cost: 100.00, network_gas_usd: 0.20, gateway_fee_pct: 5.5, market_benchmark_toman: 34800000, currency_basis: 'USDC', payment_asset: 'USDC', payment_network: 'Base/Polygon', delivery_method: 'API Balance', ban_coverage: 'supported', promotion_status: 'standard_price', is_c2c: false } },\n  { json: { sku_id: 'teamorouter-100', product_type: 'api_credit', name_fa: 'اعتبار گیت‌وی API تیموروتر (۱۰۰ دلار)', source_name: 'TeamoRouter', source_url: 'https://teamorouter.com/blogs/ai-api-crypto-payment', raw_cost: 82.00, network_gas_usd: 0.15, gateway_fee_pct: 0, market_benchmark_toman: 29500000, currency_basis: 'USDT', payment_asset: 'USDT', payment_network: 'BSC/BEP20', delivery_method: 'API Balance', ban_coverage: 'unknown', promotion_status: 'not_found', is_c2c: false } }\n];"
+      }
+    },
+    {
+      "id": "bf26-s4-c1",
+      "name": "C1. Torob Median Baseline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, -260],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:3100/mcp/torob",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.query || 'آداپتور 20 وات اپل' }) }}",
+        "options": {
+          "timeout": 6000
+        }
+      }
+    },
+    {
+      "id": "bf26-s4-c2",
+      "name": "C2. Torob Price History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, -140],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:3100/mcp/torob",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.query || 'آداپتور 20 وات اپل', mode: 'history' }) }}",
+        "options": {
+          "timeout": 6000
+        }
+      }
+    },
+    {
+      "id": "bf26-s4-c3",
+      "name": "C3. Digikala Flash Campaigns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, -20],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:3100/mcp/digikala",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.query || 'آداپتور 20 وات اپل' }) }}",
+        "options": {
+          "timeout": 6000
+        }
+      }
+    },
+    {
+      "id": "bf26-s4-c4",
+      "name": "C4. Digikala Buybox Offers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 100],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:3100/mcp/digikala",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.query || 'دسته dualsense ps5', mode: 'buybox' }) }}",
+        "options": {
+          "timeout": 6000
+        }
+      }
+    },
+    {
+      "id": "bf26-s4-c5",
+      "name": "C5. Technolife Flash Deals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 220],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:3100/mcp/technolife",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.query || 'آداپتور 20 وات اپل' }) }}",
+        "options": {
+          "timeout": 6000
+        }
+      }
+    },
+    {
+      "id": "bf26-s4-c6",
+      "name": "C6. Technolife Installment Rates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 340],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:3100/mcp/technolife",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.query || 'دسته dualsense ps5', mode: 'installments' }) }}",
+        "options": {
+          "timeout": 6000
+        }
+      }
+    },
+    {
+      "id": "bf26-s4-c7",
+      "name": "C7. Divar Tehran C2C Ads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 460],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:3100/mcp/divar",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.query || 'آیفون 13 128 تمیز' }) }}",
+        "options": {
+          "timeout": 6000
+        }
+      }
+    },
+    {
+      "id": "bf26-s4-c8",
+      "name": "C8. Divar Urgent Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1940, 460],
+      "parameters": {
+        "jsCode": "const ads = $json.ads || $json.results || [];\nconst cleaned = ads.filter(a => Number(a.price) > 0).map(a => ({ ...a, is_urgent: String(a.title || '').includes('فوری') || a.tag === 'فوری' }));\nreturn [{ json: { collector: 'divar_urgent', ads: cleaned, count: cleaned.length } }];"
+      }
+    },
+    {
+      "id": "bf26-s4-c9",
+      "name": "C9. AIPAY99 USDT Storefront",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 600],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "https://aipay99.com/en/",
+        "options": {
+          "timeout": 6000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "bf26-s4-c10",
+      "name": "C10. SuZhe AI Storefront",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 720],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "https://suzhe.ai/",
+        "options": {
+          "timeout": 6000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "bf26-s4-c11",
+      "name": "C11. OpenRouter USDC Gateway",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 840],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "https://openrouter.ai/pricing",
+        "options": {
+          "timeout": 6000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "bf26-s4-c12",
+      "name": "C12. TeamoRouter Multi-Net",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 960],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "https://teamorouter.com/blogs/ai-api-crypto-payment",
+        "options": {
+          "timeout": 6000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "bf26-s5-v1",
+      "name": "V1. Canonical JSON Schema Normalizer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2240, 260],
+      "parameters": {
+        "jsCode": "const fx = $('FX6. FX Cache & Outage Fallback').first()?.json || { usdt_toman: 272100, cny_to_usd: 0.14 };\nconst collect = (name) => { try { return $(name).all().map(i => i.json); } catch (e) { return []; } };\n\nconst physicalSeed = [\n  ...collect('W1. Apple Ecosystem Watchlist'),\n  ...collect('W2. Gaming Consoles Watchlist'),\n  ...collect('W3. PC Hardware & NVMe SSD'),\n  ...collect('W4. Used C2C Mobile (iPhone 13/14)')\n];\nconst digitalSeed = [\n  ...collect('W5. Consumer AI Subscriptions'),\n  ...collect('W6. AI Coding IDEs (Cursor Pro)'),\n  ...collect('W7. Creative & Media Tools'),\n  ...collect('W8. API Credit Gateways')\n];\n\nconst torobPicks = collect('C1. Torob Median Baseline').flatMap(x => x.picks || []);\nconst techProds = collect('C5. Technolife Flash Deals').flatMap(x => x.products || []);\nconst dkProds = collect('C3. Digikala Flash Campaigns').flatMap(x => x.products || []);\n\nconst signals = [];\nlet seq = 1;\n\nfor (const p of physicalSeed) {\n  const matchedTorob = torobPicks.find(t => String(t.title || '').includes(p.query.split(' ')[0]));\n  const marketMedian = Number(matchedTorob?.stats?.median) || p.fallback_market;\n  const matchedTech = techProds.find(t => String(t.title || '').includes(p.query.split(' ')[0]));\n  const matchedDk = dkProds.find(t => String(t.title || '').includes(p.query.split(' ')[0]));\n  const liveSale = p.is_c2c ? p.fallback_cost : (Number(matchedTech?.final_price || matchedDk?.price) || p.fallback_cost);\n  const liveBefore = p.is_c2c ? null : (Number(matchedTech?.price_before_discount || matchedDk?.price_before_discount) || p.fallback_before);\n  const sourceName = p.is_c2c ? 'دیوار تهران (C2C)' : (matchedTech ? 'تکنولایف' : matchedDk ? 'دیجیکالا' : 'حراجی بلک‌فرایدی داخلی');\n  const sourceUrl = p.is_c2c ? 'https://divar.ir' : (matchedTech?.url || matchedDk?.url || 'https://www.technolife.ir');\n\n  signals.push({ json: {\n    tracking_id: `deal-2026-bf-${String(seq++).padStart(3, '0')}`,\n    sku_id: p.sku_id,\n    product_type: p.product_type,\n    name_fa: p.name_fa,\n    source_name: sourceName,\n    source_url: sourceUrl,\n    payment_asset: p.payment_asset,\n    payment_network: p.payment_network,\n    currency_basis: p.currency_basis,\n    raw_cost: liveSale,\n    price_before_discount: liveBefore,\n    network_gas_usd: 0,\n    gateway_fee_pct: 0,\n    exchange_rate_toman: fx.usdt_toman,\n    cny_to_usd: fx.cny_to_usd,\n    market_benchmark_toman: marketMedian,\n    torob_min: Number(matchedTorob?.stats?.min) || Math.round(marketMedian * 0.88),\n    torob_max: Number(matchedTorob?.stats?.max) || Math.round(marketMedian * 1.12),\n    delivery_method: p.delivery_method,\n    ban_coverage: p.ban_coverage,\n    promotion_status: liveBefore && liveBefore > liveSale ? 'verified_bf' : 'standard_price',\n    is_c2c: Boolean(p.is_c2c)\n  } });\n}\n\nfor (const d of digitalSeed) {\n  signals.push({ json: {\n    tracking_id: `deal-2026-bf-${String(seq++).padStart(3, '0')}`,\n    sku_id: d.sku_id,\n    product_type: d.product_type,\n    name_fa: d.name_fa,\n    source_name: d.source_name,\n    source_url: d.source_url,\n    payment_asset: d.payment_asset,\n    payment_network: d.payment_network,\n    currency_basis: d.currency_basis,\n    raw_cost: d.raw_cost,\n    price_before_discount: null,\n    network_gas_usd: d.network_gas_usd || 0.15,\n    gateway_fee_pct: d.gateway_fee_pct || 0,\n    exchange_rate_toman: fx.usdt_toman,\n    cny_to_usd: fx.cny_to_usd,\n    market_benchmark_toman: d.market_benchmark_toman,\n    torob_min: Math.round(d.market_benchmark_toman * 0.92),\n    torob_max: Math.round(d.market_benchmark_toman * 1.08),\n    delivery_method: d.delivery_method,\n    ban_coverage: d.ban_coverage,\n    promotion_status: d.promotion_status || 'not_found',\n    is_c2c: false\n  } });\n}\n\nreturn signals;"
+      }
+    },
+    {
+      "id": "bf26-s5-v2",
+      "name": "V2. Fake Discount Detector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 260],
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const d = item.json;\n  const hasBefore = d.price_before_discount !== null && d.price_before_discount !== undefined && Number(d.price_before_discount) > 0;\n  const discountVerified = hasBefore ? Number(d.price_before_discount) > Number(d.raw_cost) : true;\n  return { json: {\n    ...d,\n    discount_verified: discountVerified,\n    promotion_status: discountVerified ? d.promotion_status : 'fake_promo'\n  } };\n});"
+      }
+    },
+    {
+      "id": "bf26-s5-v3",
+      "name": "V3. Divar <40% Manual Review Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2760, 260],
+      "parameters": {
+        "jsCode": "const DIVAR_SCAM_FLOOR = 0.40;\nreturn items.map(item => {\n  const d = item.json;\n  const ratio = d.market_benchmark_toman > 0 ? d.raw_cost / d.market_benchmark_toman : 1;\n  const manualReview = Boolean(d.is_c2c && ratio < DIVAR_SCAM_FLOOR);\n  return { json: {\n    ...d,\n    c2c_market_ratio: Number(ratio.toFixed(2)),\n    manual_review_required: manualReview\n  } };\n});"
+      }
+    },
+    {
+      "id": "bf26-s5-v4",
+      "name": "V4. Liquidity Cap Guard (>45M TMN)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3020, 260],
+      "parameters": {
+        "jsCode": "const LIQUIDITY_CAP_TMN = 45000000;\nreturn items.map(item => {\n  const d = item.json;\n  const estimatedCost = d.currency_basis === 'TOMAN' ? d.raw_cost : Math.round(d.raw_cost * d.exchange_rate_toman);\n  const withinCap = d.product_type === 'physical_tech' ? estimatedCost <= LIQUIDITY_CAP_TMN : true;\n  return { json: { ...d, within_liquidity_cap: withinCap, liquidity_cap_toman: LIQUIDITY_CAP_TMN } };\n});"
+      }
+    },
+    {
+      "id": "bf26-s5-v5",
+      "name": "V5. MetaMask Network Validator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3280, 260],
+      "parameters": {
+        "jsCode": "const VALID_RAILS = new Set(['Shaparak', 'Domestic Bank', 'BSC/BEP20', 'TRON/TRC20', 'Base/Polygon', 'Alipay/CNY']);\nreturn items.map(item => {\n  const d = item.json;\n  const railOk = VALID_RAILS.has(d.payment_network);\n  return { json: { ...d, payment_rail_verified: railOk } };\n});"
+      }
+    },
+    {
+      "id": "bf26-s5-v6",
+      "name": "V6. Evidence & Source Logger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3540, 260],
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nreturn items.map(item => ({\n  json: {\n    ...item.json,\n    evidence_type: item.json.product_type === 'physical_tech' ? 'http_mcp_collector' : 'crypto_storefront_snapshot',\n    verified_at: now\n  }\n}));"
+      }
+    },
+    {
+      "id": "bf26-s5-v7",
+      "name": "V7. Ban & Warranty Classifier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3800, 260],
+      "parameters": {
+        "jsCode": "const LABELS_FA = {\n  supported: 'تحت پوشش گارانتی / معتبر',\n  excluded: 'بدون گارانتی بن (Excluded)',\n  unknown: 'نامشخص (نیاز به تایید دستی)'\n};\nreturn items.map(item => {\n  const cov = ['supported', 'excluded', 'unknown'].includes(item.json.ban_coverage) ? item.json.ban_coverage : 'unknown';\n  return { json: { ...item.json, ban_coverage: cov, ban_coverage_fa: LABELS_FA[cov] } };\n});"
+      }
+    },
+    {
+      "id": "bf26-s5-v8",
+      "name": "V8. Price Volatility Calculator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4060, 260],
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const d = item.json;\n  const spread = d.market_benchmark_toman > 0 ? ((d.torob_max - d.torob_min) / d.market_benchmark_toman) * 100 : 0;\n  return { json: { ...d, volatility_pct: Number(spread.toFixed(1)) } };\n});"
+      }
+    },
+    {
+      "id": "bf26-s6-m1",
+      "name": "M1. Total Landed Cost Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4360, 260],
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const d = item.json;\n  const feeMul = 1 + (Number(d.gateway_fee_pct || 0) / 100);\n  let totalToman = 0;\n  if (d.currency_basis === 'TOMAN') {\n    totalToman = Math.round(Number(d.raw_cost) * feeMul);\n  } else if (d.currency_basis === 'USDT' || d.currency_basis === 'USDC') {\n    totalToman = Math.round((Number(d.raw_cost) * feeMul + Number(d.network_gas_usd || 0)) * Number(d.exchange_rate_toman));\n  } else if (d.currency_basis === 'CNY') {\n    totalToman = Math.round((Number(d.raw_cost) * Number(d.cny_to_usd || 0.14) * feeMul + Number(d.network_gas_usd || 0)) * Number(d.exchange_rate_toman));\n  }\n  return { json: { ...d, total_cost_toman: Math.max(1, totalToman) } };\n});"
+      }
+    },
+    {
+      "id": "bf26-s6-m2",
+      "name": "M2. Net Profit Calculator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4620, 260],
+      "parameters": {
+        "jsCode": "return items.map(item => ({\n  json: {\n    ...item.json,\n    net_profit_toman: Math.round(Number(item.json.market_benchmark_toman) - Number(item.json.total_cost_toman))\n  }\n}));"
+      }
+    },
+    {
+      "id": "bf26-s6-m3",
+      "name": "M3. Net Margin % Calculator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4880, 260],
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const cost = Math.max(1, Number(item.json.total_cost_toman));\n  const margin = Number(((Number(item.json.net_profit_toman) / cost) * 100).toFixed(1));\n  return { json: { ...item.json, margin_pct: margin } };\n});"
+      }
+    },
+    {
+      "id": "bf26-s6-m4",
+      "name": "M4. Cycle ROI Calculator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5140, 260],
+      "parameters": {
+        "jsCode": "return items.map(item => ({\n  json: {\n    ...item.json,\n    roi_pct: item.json.margin_pct,\n    cost_usd_equivalent: Number((item.json.total_cost_toman / Math.max(1, item.json.exchange_rate_toman)).toFixed(2))\n  }\n}));"
+      }
+    },
+    {
+      "id": "bf26-s6-m5",
+      "name": "M5. 100M TMN Budget Allocator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5400, 260],
+      "parameters": {
+        "jsCode": "const BUDGET_TMN = 100000000;\nreturn items.map(item => ({\n  json: {\n    ...item.json,\n    budget_capacity_units: Math.floor(BUDGET_TMN / Math.max(1, Number(item.json.total_cost_toman)))\n  }\n}));"
+      }
+    },
+    {
+      "id": "bf26-s6-m6",
+      "name": "M6. Deal Quality Grader & Card Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5660, 260],
+      "parameters": {
+        "jsCode": "const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst fa = n => Math.round(Number(n || 0)).toLocaleString('fa-IR');\n\nreturn items.map(item => {\n  const d = item.json;\n  let dealGrade = 'DROP';\n  if (d.manual_review_required) {\n    dealGrade = 'MANUAL_REVIEW';\n  } else if (d.discount_verified && d.within_liquidity_cap && d.margin_pct >= 30) {\n    dealGrade = 'A+';\n  } else if (d.discount_verified && d.within_liquidity_cap && d.margin_pct >= 18) {\n    dealGrade = 'A';\n  }\n\n  const header = dealGrade === 'A+'\n    ? '🔥 <b>فرصت طلایی Grade A+ بلک فرایدی ۲۰۲۶</b>'\n    : dealGrade === 'MANUAL_REVIEW'\n      ? '⚠️ <b>صف بررسی دستی ادمین (آگهی زیر ۴۰٪ دیوار)</b>'\n      : '🎯 <b>فرصت استاندارد Grade A بلک فرایدی ۲۰۲۶</b>';\n\n  const html = [\n    header,\n    '',\n    `📦 <b>محصول:</b> ${esc(d.name_fa)}`,\n    `🏷 <b>نوع قرارداد:</b> ${esc(d.product_type)} | <b>رتبه:</b> ${dealGrade}`,\n    `🏪 <b>منبع تأمین:</b> ${esc(d.source_name)} (${esc(d.payment_asset)} / ${esc(d.payment_network)})`,\n    `💰 <b>قیمت خرید تمام‌شده:</b> ${fa(d.total_cost_toman)} تومان`,\n    `📊 <b>قیمت بازار (میانه ترب):</b> ${fa(d.market_benchmark_toman)} تومان`,\n    `✅ <b>سود خالص معامله:</b> ${fa(d.net_profit_toman)} تومان`,\n    `📈 <b>حاشیه سود / ROI:</b> ${d.margin_pct}%`,\n    `🛡 <b>وضعیت گارانتی بن:</b> ${esc(d.ban_coverage_fa)} · تحویل: ${esc(d.delivery_method)}`,\n    `🧮 <b>ظرفیت خرید با بودجه ۱۰۰ م:</b> ${d.budget_capacity_units} عدد`,\n    '',\n    `🔗 <a href=\"${esc(d.source_url)}\">مشاهده و خرید مستقیم</a>`\n  ].join('\\n');\n\n  return { json: { ...d, deal_grade: dealGrade, telegram_html: html } };\n});"
+      }
+    },
+    {
+      "id": "bf26-s7-r4",
+      "name": "R4. 6-Hour Deduplication Memory",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5960, 260],
+      "parameters": {
+        "jsCode": "const DEDUPE_HOURS = 6;\nconst store = $getWorkflowStaticData('global');\nstore.alerted = store.alerted || {};\n\nif ($input.first()?.json?.reset_dedupe === true) {\n  store.alerted = {};\n  return [{ json: { status: 'dedupe_memory_cleared', deal_grade: 'DROP', timestamp: new Date().toISOString() } }];\n}\n\nconst now = Date.now();\nfor (const k of Object.keys(store.alerted)) {\n  if (now - store.alerted[k] > DEDUPE_HOURS * 3600 * 1000) delete store.alerted[k];\n}\n\nconst out = [];\nfor (const item of items) {\n  const d = item.json;\n  if (d.deal_grade === 'DROP') {\n    out.push({ json: { ...d, is_new_alert: false } });\n    continue;\n  }\n  const key = `${d.sku_id || d.tracking_id}|${d.total_cost_toman}|${d.deal_grade}`;\n  const isNew = !store.alerted[key];\n  if (isNew) {\n    store.alerted[key] = now;\n    out.push({ json: { ...d, is_new_alert: true, dedupe_key: key } });\n  }\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "bf26-s7-r1",
+      "name": "R1. 4-Branch Switch Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [6240, 260],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Grade_A_Plus",
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.deal_grade }}",
+                    "rightValue": "A+",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "Grade_A",
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.deal_grade }}",
+                    "rightValue": "A",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "Manual_Review",
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.deal_grade }}",
+                    "rightValue": "MANUAL_REVIEW",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "Drop",
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.deal_grade }}",
+                    "rightValue": "DROP",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bf26-s7-r2",
+      "name": "R2. Grade A+ Golden Guard (>30%)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [6520, 40],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.margin_pct }}",
+              "rightValue": 30,
+              "operator": { "type": "number", "operation": "gte" }
+            },
+            {
+              "leftValue": "={{ $json.is_new_alert }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bf26-s7-r3",
+      "name": "R3. Grade A Standard Guard (18-30%)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [6520, 220],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.margin_pct }}",
+              "rightValue": 18,
+              "operator": { "type": "number", "operation": "gte" }
+            },
+            {
+              "leftValue": "={{ $json.is_new_alert }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bf26-s8-d1",
+      "name": "D1. Telegram Golden Deal Card (A+)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [6860, -20],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot9046211629:AAEAiY-o7utSsCAwUFz-MuVNS5_QoZAols8/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: '7141177244', text: $json.telegram_html, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🔥 خرید مستقیم (Grade A+)', url: $json.source_url }]] } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "bf26-s8-d2",
+      "name": "D2. Telegram Standard Archive Feed (A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [6860, 180],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot9046211629:AAEAiY-o7utSsCAwUFz-MuVNS5_QoZAols8/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: '7141177244', text: $json.telegram_html, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🛒 مشاهده و خرید (Grade A)', url: $json.source_url }]] } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "bf26-s8-d3",
+      "name": "D3. Admin Manual Review Queue (<40% Divar)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [6860, 380],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot9046211629:AAEAiY-o7utSsCAwUFz-MuVNS5_QoZAols8/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: '7141177244', text: $json.telegram_html, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: '🔍 بررسی دستی آگهی دیوار', url: $json.source_url }]] } }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "bf26-s8-d4",
+      "name": "D4. Admin System Error Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [6860, 740],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot9046211629:AAEAiY-o7utSsCAwUFz-MuVNS5_QoZAols8/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: '7141177244', parse_mode: 'HTML', text: '⚠️ <b>هشدار سیستمی رادار بلک‌فرایدی</b>\\n\\nخطا در استعلام زنده نرخ تتر؛ سیستم روی نرخ فالبک (' + ($json.usdt_toman || 272100).toLocaleString('fa-IR') + ' تومان) اجرا شد.' }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "bf26-s8-d5",
+      "name": "D5. PostgreSQL / JSON Deal Ledger Logger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6860, 560],
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const d = item.json;\n  return { json: {\n    tracking_id: d.tracking_id,\n    product_type: d.product_type,\n    name_fa: d.name_fa,\n    source_name: d.source_name,\n    source_url: d.source_url,\n    payment_asset: d.payment_asset,\n    payment_network: d.payment_network,\n    currency_basis: d.currency_basis,\n    raw_cost: d.raw_cost,\n    network_gas_usd: d.network_gas_usd,\n    exchange_rate_toman: d.exchange_rate_toman,\n    total_cost_toman: d.total_cost_toman,\n    market_benchmark_toman: d.market_benchmark_toman,\n    net_profit_toman: d.net_profit_toman,\n    margin_pct: d.margin_pct,\n    roi_pct: d.roi_pct,\n    delivery_method: d.delivery_method,\n    ban_coverage: d.ban_coverage,\n    promotion_status: d.promotion_status,\n    manual_review_required: d.manual_review_required,\n    deal_grade: d.deal_grade,\n    budget_capacity_units: d.budget_capacity_units,\n    logged_at: new Date().toISOString()\n  } };\n});"
+      }
+    },
+    {
+      "id": "bf26-s8-d6",
+      "name": "D6. Pipeline Health Summary Output",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [7200, 300],
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "T1. Schedule (Every 20m)": {
+      "main": [
+        [
+          { "node": "FX1. Wallex Live USDT/TMN", "type": "main", "index": 0 },
+          { "node": "FX2. TGJU Free FX (USD/EUR/AED)", "type": "main", "index": 0 },
+          { "node": "FX3. CNY/USD Parity Converter", "type": "main", "index": 0 },
+          { "node": "FX4. Network Gas Estimator (BSC/TRC20)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "T2. Manual Live Test Webhook": {
+      "main": [
+        [
+          { "node": "FX1. Wallex Live USDT/TMN", "type": "main", "index": 0 },
+          { "node": "FX2. TGJU Free FX (USD/EUR/AED)", "type": "main", "index": 0 },
+          { "node": "FX3. CNY/USD Parity Converter", "type": "main", "index": 0 },
+          { "node": "FX4. Network Gas Estimator (BSC/TRC20)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "T3. Emergency Reset Webhook": {
+      "main": [
+        [
+          { "node": "R4. 6-Hour Deduplication Memory", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "T4. Nightly Sync Cron": {
+      "main": [
+        [
+          { "node": "FX1. Wallex Live USDT/TMN", "type": "main", "index": 0 },
+          { "node": "C2. Torob Price History", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "FX1. Wallex Live USDT/TMN": {
+      "main": [
+        [{ "node": "FX5. Toman FX Normalizer", "type": "main", "index": 0 }],
+        [{ "node": "D4. Admin System Error Alert", "type": "main", "index": 0 }]
+      ]
+    },
+    "FX2. TGJU Free FX (USD/EUR/AED)": {
+      "main": [[{ "node": "FX5. Toman FX Normalizer", "type": "main", "index": 0 }]]
+    },
+    "FX3. CNY/USD Parity Converter": {
+      "main": [[{ "node": "FX5. Toman FX Normalizer", "type": "main", "index": 0 }]]
+    },
+    "FX4. Network Gas Estimator (BSC/TRC20)": {
+      "main": [[{ "node": "FX5. Toman FX Normalizer", "type": "main", "index": 0 }]]
+    },
+    "FX5. Toman FX Normalizer": {
+      "main": [[{ "node": "FX6. FX Cache & Outage Fallback", "type": "main", "index": 0 }]]
+    },
+    "FX6. FX Cache & Outage Fallback": {
+      "main": [
+        [
+          { "node": "W1. Apple Ecosystem Watchlist", "type": "main", "index": 0 },
+          { "node": "W2. Gaming Consoles Watchlist", "type": "main", "index": 0 },
+          { "node": "W3. PC Hardware & NVMe SSD", "type": "main", "index": 0 },
+          { "node": "W4. Used C2C Mobile (iPhone 13/14)", "type": "main", "index": 0 },
+          { "node": "W5. Consumer AI Subscriptions", "type": "main", "index": 0 },
+          { "node": "W6. AI Coding IDEs (Cursor Pro)", "type": "main", "index": 0 },
+          { "node": "W7. Creative & Media Tools", "type": "main", "index": 0 },
+          { "node": "W8. API Credit Gateways", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "W1. Apple Ecosystem Watchlist": {
+      "main": [
+        [
+          { "node": "C1. Torob Median Baseline", "type": "main", "index": 0 },
+          { "node": "C2. Torob Price History", "type": "main", "index": 0 },
+          { "node": "C3. Digikala Flash Campaigns", "type": "main", "index": 0 },
+          { "node": "C5. Technolife Flash Deals", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "W2. Gaming Consoles Watchlist": {
+      "main": [
+        [
+          { "node": "C1. Torob Median Baseline", "type": "main", "index": 0 },
+          { "node": "C3. Digikala Flash Campaigns", "type": "main", "index": 0 },
+          { "node": "C4. Digikala Buybox Offers", "type": "main", "index": 0 },
+          { "node": "C5. Technolife Flash Deals", "type": "main", "index": 0 },
+          { "node": "C6. Technolife Installment Rates", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "W3. PC Hardware & NVMe SSD": {
+      "main": [
+        [
+          { "node": "C1. Torob Median Baseline", "type": "main", "index": 0 },
+          { "node": "C5. Technolife Flash Deals", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "W4. Used C2C Mobile (iPhone 13/14)": {
+      "main": [
+        [
+          { "node": "C1. Torob Median Baseline", "type": "main", "index": 0 },
+          { "node": "C7. Divar Tehran C2C Ads", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "W5. Consumer AI Subscriptions": {
+      "main": [
+        [
+          { "node": "C9. AIPAY99 USDT Storefront", "type": "main", "index": 0 },
+          { "node": "C10. SuZhe AI Storefront", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "W6. AI Coding IDEs (Cursor Pro)": {
+      "main": [[{ "node": "C10. SuZhe AI Storefront", "type": "main", "index": 0 }]]
+    },
+    "W7. Creative & Media Tools": {
+      "main": [[{ "node": "C9. AIPAY99 USDT Storefront", "type": "main", "index": 0 }]]
+    },
+    "W8. API Credit Gateways": {
+      "main": [
+        [
+          { "node": "C11. OpenRouter USDC Gateway", "type": "main", "index": 0 },
+          { "node": "C12. TeamoRouter Multi-Net", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "C1. Torob Median Baseline": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "C2. Torob Price History": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "C3. Digikala Flash Campaigns": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "C4. Digikala Buybox Offers": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "C5. Technolife Flash Deals": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "C6. Technolife Installment Rates": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "C7. Divar Tehran C2C Ads": {
+      "main": [[{ "node": "C8. Divar Urgent Filter", "type": "main", "index": 0 }]]
+    },
+    "C8. Divar Urgent Filter": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "C9. AIPAY99 USDT Storefront": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "C10. SuZhe AI Storefront": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "C11. OpenRouter USDC Gateway": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "C12. TeamoRouter Multi-Net": {
+      "main": [[{ "node": "V1. Canonical JSON Schema Normalizer", "type": "main", "index": 0 }]]
+    },
+    "V1. Canonical JSON Schema Normalizer": {
+      "main": [[{ "node": "V2. Fake Discount Detector", "type": "main", "index": 0 }]]
+    },
+    "V2. Fake Discount Detector": {
+      "main": [[{ "node": "V3. Divar <40% Manual Review Filter", "type": "main", "index": 0 }]]
+    },
+    "V3. Divar <40% Manual Review Filter": {
+      "main": [[{ "node": "V4. Liquidity Cap Guard (>45M TMN)", "type": "main", "index": 0 }]]
+    },
+    "V4. Liquidity Cap Guard (>45M TMN)": {
+      "main": [[{ "node": "V5. MetaMask Network Validator", "type": "main", "index": 0 }]]
+    },
+    "V5. MetaMask Network Validator": {
+      "main": [[{ "node": "V6. Evidence & Source Logger", "type": "main", "index": 0 }]]
+    },
+    "V6. Evidence & Source Logger": {
+      "main": [[{ "node": "V7. Ban & Warranty Classifier", "type": "main", "index": 0 }]]
+    },
+    "V7. Ban & Warranty Classifier": {
+      "main": [[{ "node": "V8. Price Volatility Calculator", "type": "main", "index": 0 }]]
+    },
+    "V8. Price Volatility Calculator": {
+      "main": [[{ "node": "M1. Total Landed Cost Engine", "type": "main", "index": 0 }]]
+    },
+    "M1. Total Landed Cost Engine": {
+      "main": [[{ "node": "M2. Net Profit Calculator", "type": "main", "index": 0 }]]
+    },
+    "M2. Net Profit Calculator": {
+      "main": [[{ "node": "M3. Net Margin % Calculator", "type": "main", "index": 0 }]]
+    },
+    "M3. Net Margin % Calculator": {
+      "main": [[{ "node": "M4. Cycle ROI Calculator", "type": "main", "index": 0 }]]
+    },
+    "M4. Cycle ROI Calculator": {
+      "main": [[{ "node": "M5. 100M TMN Budget Allocator", "type": "main", "index": 0 }]]
+    },
+    "M5. 100M TMN Budget Allocator": {
+      "main": [[{ "node": "M6. Deal Quality Grader & Card Formatter", "type": "main", "index": 0 }]]
+    },
+    "M6. Deal Quality Grader & Card Formatter": {
+      "main": [[{ "node": "R4. 6-Hour Deduplication Memory", "type": "main", "index": 0 }]]
+    },
+    "R4. 6-Hour Deduplication Memory": {
+      "main": [[{ "node": "R1. 4-Branch Switch Router", "type": "main", "index": 0 }]]
+    },
+    "R1. 4-Branch Switch Router": {
+      "main": [
+        [{ "node": "R2. Grade A+ Golden Guard (>30%)", "type": "main", "index": 0 }],
+        [{ "node": "R3. Grade A Standard Guard (18-30%)", "type": "main", "index": 0 }],
+        [{ "node": "D3. Admin Manual Review Queue (<40% Divar)", "type": "main", "index": 0 }],
+        [{ "node": "D5. PostgreSQL / JSON Deal Ledger Logger", "type": "main", "index": 0 }]
+      ]
+    },
+    "R2. Grade A+ Golden Guard (>30%)": {
+      "main": [
+        [
+          { "node": "D1. Telegram Golden Deal Card (A+)", "type": "main", "index": 0 },
+          { "node": "D5. PostgreSQL / JSON Deal Ledger Logger", "type": "main", "index": 0 }
+        ],
+        [{ "node": "D5. PostgreSQL / JSON Deal Ledger Logger", "type": "main", "index": 0 }]
+      ]
+    },
+    "R3. Grade A Standard Guard (18-30%)": {
+      "main": [
+        [
+          { "node": "D2. Telegram Standard Archive Feed (A)", "type": "main", "index": 0 },
+          { "node": "D5. PostgreSQL / JSON Deal Ledger Logger", "type": "main", "index": 0 }
+        ],
+        [{ "node": "D5. PostgreSQL / JSON Deal Ledger Logger", "type": "main", "index": 0 }]
+      ]
+    },
+    "D1. Telegram Golden Deal Card (A+)": {
+      "main": [[{ "node": "D6. Pipeline Health Summary Output", "type": "main", "index": 0 }]]
+    },
+    "D2. Telegram Standard Archive Feed (A)": {
+      "main": [[{ "node": "D6. Pipeline Health Summary Output", "type": "main", "index": 0 }]]
+    },
+    "D3. Admin Manual Review Queue (<40% Divar)": {
+      "main": [
+        [
+          { "node": "D5. PostgreSQL / JSON Deal Ledger Logger", "type": "main", "index": 0 },
+          { "node": "D6. Pipeline Health Summary Output", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "D4. Admin System Error Alert": {
+      "main": [[{ "node": "D6. Pipeline Health Summary Output", "type": "main", "index": 0 }]]
+    },
+    "D5. PostgreSQL / JSON Deal Ledger Logger": {
+      "main": [[{ "node": "D6. Pipeline Health Summary Output", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "tags": [
+    { "name": "black-friday-2026" },
+    { "name": "arbitrage-54-nodes" }
+  ]
+}

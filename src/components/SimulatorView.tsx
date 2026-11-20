@@ -22,7 +22,10 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ deals, config, fx 
   const [physicalSharePct, setPhysicalSharePct] = useState(60);
 
   const digitalDeals = useMemo(
-    () => deals.filter((d) => d.stream === 'digital' && d.currency === 'USDT'),
+    () =>
+      deals.filter(
+        (d) => d.stream === 'digital' && (d.currency === 'USDT' || d.currency === 'USDC'),
+      ),
     [deals],
   );
 
@@ -32,7 +35,8 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ deals, config, fx 
     for (let rate = 230_000; rate <= 320_000; rate += 10_000) {
       const row: Record<string, number> = { usdtRate: rate };
       for (const item of digitalDeals) {
-        const costTmn = (item.sourceCost + item.networkFeeUsd) * rate;
+        const feeMul = 1 + (item.gatewayFeePct ?? 0) / 100;
+        const costTmn = (item.sourceCost * feeMul + item.networkFeeUsd) * rate;
         const margin = ((item.marketBenchmarkToman - costTmn) / costTmn) * 100;
         row[item.id] = Number(margin.toFixed(1));
       }

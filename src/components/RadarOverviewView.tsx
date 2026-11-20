@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowUpDown,
   CheckCircle2,
+  Eye,
   Plus,
   RotateCcw,
   Search,
@@ -18,6 +19,9 @@ import {
   formatTimeAgo,
   formatToman,
   formatTomanShort,
+  getBanCoverageMeta,
+  getGradeMeta,
+  getProductTypeLabel,
   getValidationMeta,
 } from '../utils/formatters';
 
@@ -29,7 +33,14 @@ interface RadarOverviewViewProps {
   onClearDedupe: () => Promise<void>;
 }
 
-type FilterTab = 'all' | 'verified' | 'physical' | 'digital' | 'rejected';
+type FilterTab =
+  | 'all'
+  | 'verified'
+  | 'physical_tech'
+  | 'consumer_subscription'
+  | 'api_credit'
+  | 'manual_review'
+  | 'dropped';
 type SortField = 'margin' | 'profit' | 'cost';
 
 export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
@@ -45,12 +56,12 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
   const [sortAsc, setSortAsc] = useState(false);
   const [showControls, setShowControls] = useState(false);
 
-  // Local draft states for engine parameters
   const [budgetM, setBudgetM] = useState(String(Math.round(state.config.budgetToman / 1_000_000)));
   const [capM, setCapM] = useState(
     String(Math.round(state.config.maxItemCommitmentToman / 1_000_000)),
   );
   const [minMargin, setMinMargin] = useState(String(state.config.minMarginPct));
+  const [goldenMargin, setGoldenMargin] = useState(String(state.config.goldenMarginPct));
   const [usdtOverride, setUsdtOverride] = useState(String(state.fx.usdtToman));
   const [useLiveUsdt, setUseLiveUsdt] = useState(state.config.useLiveUsdt);
   const [applyingConfig, setApplyingConfig] = useState(false);
@@ -59,15 +70,19 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
     const q = searchQuery.trim().toLowerCase();
     const list = state.deals.filter((deal) => {
       if (filterTab === 'verified' && !deal.isDeal) return false;
-      if (filterTab === 'physical' && deal.stream !== 'physical') return false;
-      if (filterTab === 'digital' && deal.stream !== 'digital') return false;
-      if (filterTab === 'rejected' && deal.isDeal) return false;
+      if (filterTab === 'physical_tech' && deal.productType !== 'physical_tech') return false;
+      if (filterTab === 'consumer_subscription' && deal.productType !== 'consumer_subscription')
+        return false;
+      if (filterTab === 'api_credit' && deal.productType !== 'api_credit') return false;
+      if (filterTab === 'manual_review' && !deal.manualReviewRequired) return false;
+      if (filterTab === 'dropped' && (deal.isDeal || deal.manualReviewRequired)) return false;
       if (!q) return true;
       return (
         deal.nameEn.toLowerCase().includes(q) ||
         deal.nameFa.toLowerCase().includes(q) ||
         deal.source.toLowerCase().includes(q) ||
-        deal.category.toLowerCase().includes(q)
+        deal.category.toLowerCase().includes(q) ||
+        deal.paymentNetwork.toLowerCase().includes(q)
       );
     });
 
@@ -94,8 +109,9 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
     try {
       await onUpdateConfig({
         budgetToman: Math.max(1, Number(budgetM) || 100) * 1_000_000,
-        maxItemCommitmentToman: Math.max(1, Number(capM) || 35) * 1_000_000,
+        maxItemCommitmentToman: Math.max(1, Number(capM) || 45) * 1_000_000,
         minMarginPct: Math.max(0, Number(minMargin) || 18),
+        goldenMarginPct: Math.max(5, Number(goldenMargin) || 30),
         useLiveUsdt,
         manualUsdtToman: Math.max(10_000, Number(usdtOverride) || 270_000),
       });
@@ -113,7 +129,7 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
 
   return (
     <div className="space-y-8">
-      {/* KPI Metric Strip — Flat 1px bordered container with hairline dividers */}
+      {/* KPI Metric Strip */}
       <section className="grid grid-cols-1 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
         <div className="p-5">
           <div className="text-xs font-medium text-slate-500">Live USDT / Toman Rate</div>
@@ -122,18 +138,21 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
             <span className="text-xs font-normal text-slate-500">TMN</span>
           </div>
           <div className="mt-1.5 text-xs text-slate-500">
-            {fxSourceLabel} · Updated {formatTimeAgo(state.fx.fetchedAt)}
+            {fxSourceLabel} · CNY {state.fx.cnyToman.toLocaleString('en-US')} TMN
           </div>
         </div>
 
         <div className="p-5">
-          <div className="text-xs font-medium text-slate-500">Verified Opportunities</div>
+          <div className="text-xs font-medium text-slate-500">4-Branch Deal Grading</div>
           <div className="mt-2 font-mono tabular-nums text-2xl font-semibold text-emerald-700">
-            {state.summary.verifiedDealsCount}{' '}
-            <span className="text-sm font-normal text-slate-400">/ {state.summary.totalTracked}</span>
+            {state.summary.goldenDealsCount} A+{' '}
+            <span className="text-base font-medium text-slate-700">
+              · {state.summary.standardDealsCount} A
+            </span>
           </div>
           <div className="mt-1.5 text-xs text-slate-500">
-            {state.summary.physicalDealsCount} Physical · {state.summary.digitalDealsCount} Digital AI
+            {state.summary.physicalDealsCount} Physical · {state.summary.consumerSubDealsCount} Subs ·{' '}
+            {state.summary.apiCreditDealsCount} API Credits
           </div>
         </div>
 
@@ -142,8 +161,9 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
           <div className="mt-2 font-mono tabular-nums text-2xl font-semibold text-slate-900">
             {state.summary.avgVerifiedMarginPct}%
           </div>
-          <div className="mt-1.5 truncate text-xs text-slate-500">
-            Peak: {state.summary.bestDealMarginPct}% · Floor {state.config.minMarginPct}%
+          <div className="mt-1.5 text-xs text-slate-500">
+            Peak {state.summary.bestDealMarginPct}% · A+ &ge;{state.config.goldenMarginPct}% · A &ge;
+            {state.config.minMarginPct}%
           </div>
         </div>
 
@@ -155,38 +175,45 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
             +{formatTomanShort(state.summary.deployableProfitPotentialToman)}
           </div>
           <div className="mt-1.5 text-xs text-slate-500">
-            Max {Math.round(state.config.maxItemCommitmentToman / 1_000_000)}M per physical SKU · {state.summary.rejectedCount} filtered
+            {state.summary.manualReviewCount} Manual Review · {state.summary.rejectedCount} Dropped
           </div>
         </div>
       </section>
 
       {/* Main Arbitrage Ledger */}
       <section className="rounded-lg border border-slate-200 bg-white">
-        {/* Toolbar */}
         <div className="flex flex-col gap-4 border-b border-slate-200 p-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            {/* Functional Filter Segmented Control */}
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            {/* Functional Segmented Filter Bar */}
             <div className="flex flex-wrap items-center gap-1 rounded-md bg-slate-100 p-1">
               {(
                 [
                   { id: 'all', label: `All (${state.deals.length})` },
                   { id: 'verified', label: `Verified (${state.summary.verifiedDealsCount})` },
                   {
-                    id: 'physical',
-                    label: `Stream A: Physical (${state.deals.filter((d) => d.stream === 'physical').length})`,
+                    id: 'physical_tech',
+                    label: `Physical (${state.deals.filter((d) => d.productType === 'physical_tech').length})`,
                   },
                   {
-                    id: 'digital',
-                    label: `Stream B: Digital (${state.deals.filter((d) => d.stream === 'digital').length})`,
+                    id: 'consumer_subscription',
+                    label: `Consumer AI (${state.deals.filter((d) => d.productType === 'consumer_subscription').length})`,
                   },
-                  { id: 'rejected', label: `Filtered (${state.summary.rejectedCount})` },
+                  {
+                    id: 'api_credit',
+                    label: `API Credits (${state.deals.filter((d) => d.productType === 'api_credit').length})`,
+                  },
+                  {
+                    id: 'manual_review',
+                    label: `Review Queue (${state.summary.manualReviewCount})`,
+                  },
+                  { id: 'dropped', label: `Dropped (${state.summary.rejectedCount})` },
                 ] as Array<{ id: FilterTab; label: string }>
               ).map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() => setFilterTab(tab.id)}
-                  className={`rounded px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                  className={`rounded px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                     filterTab === tab.id
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -205,8 +232,8 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter product or source..."
-                  className="w-full rounded-md border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none sm:w-52"
+                  placeholder="Filter SKU, source, network..."
+                  className="w-full rounded-md border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none sm:w-48"
                 />
               </div>
               <button
@@ -232,14 +259,14 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
             </div>
           </div>
 
-          {/* Expandable Engine Risk & FX Parameter Bar */}
+          {/* Expandable Risk & FX Parameter Bar */}
           {showControls && (
             <form
               onSubmit={handleApplyConfig}
-              className="grid grid-cols-1 gap-3 border-t border-slate-200 pt-4 sm:grid-cols-2 lg:grid-cols-6 items-end"
+              className="grid grid-cols-1 gap-3 border-t border-slate-200 pt-4 sm:grid-cols-2 lg:grid-cols-7 items-end"
             >
               <label className="block text-xs text-slate-600">
-                Budget (Million TMN)
+                Budget (M TMN)
                 <input
                   type="number"
                   min={1}
@@ -249,7 +276,7 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
                 />
               </label>
               <label className="block text-xs text-slate-600">
-                Single-Item Cap (M TMN)
+                Liquidity Cap (M)
                 <input
                   type="number"
                   min={1}
@@ -259,7 +286,7 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
                 />
               </label>
               <label className="block text-xs text-slate-600">
-                Min Net Margin (%)
+                Grade A Floor (%)
                 <input
                   type="number"
                   min={0}
@@ -270,13 +297,24 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
                 />
               </label>
               <label className="block text-xs text-slate-600">
-                USDT Rate Mode
+                Grade A+ Floor (%)
+                <input
+                  type="number"
+                  min={5}
+                  step="1"
+                  value={goldenMargin}
+                  onChange={(e) => setGoldenMargin(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-2.5 py-1.5 font-mono text-xs text-slate-900"
+                />
+              </label>
+              <label className="block text-xs text-slate-600">
+                USDT Feed Mode
                 <select
                   value={useLiveUsdt ? 'live' : 'manual'}
                   onChange={(e) => setUseLiveUsdt(e.target.value === 'live')}
                   className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900"
                 >
-                  <option value="live">Wallex Live Feed</option>
+                  <option value="live">Wallex Live</option>
                   <option value="manual">Manual Override</option>
                 </select>
               </label>
@@ -307,14 +345,14 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs font-medium text-slate-500">
-                <th className="px-5 py-3">Product & Source</th>
+                <th className="px-5 py-3">Product, Type & Network</th>
                 <th className="px-4 py-3 text-right">
                   <button
                     type="button"
                     onClick={() => toggleSort('cost')}
                     className="inline-flex items-center gap-1 hover:text-slate-900 whitespace-nowrap"
                   >
-                    Normalized Cost
+                    Landed Cost
                     <ArrowUpDown className="h-3 w-3" />
                   </button>
                 </th>
@@ -339,8 +377,8 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
                     <ArrowUpDown className="h-3 w-3" />
                   </button>
                 </th>
-                <th className="px-4 py-3 text-right whitespace-nowrap">Units (Cap)</th>
-                <th className="px-5 py-3 whitespace-nowrap">Validation</th>
+                <th className="px-4 py-3 whitespace-nowrap">Ban / Delivery</th>
+                <th className="px-5 py-3 whitespace-nowrap">Grade & Route</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -349,7 +387,7 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
                   <td colSpan={7} className="px-6 py-12 text-center">
                     <p className="text-sm font-medium text-slate-700">No matching opportunities</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      Clear your search filter or add a new SKU to evaluate against the current USDT rate.
+                      Clear your search filter or add a new SKU to evaluate against the live FX feed.
                     </p>
                     <button
                       type="button"
@@ -365,7 +403,9 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
                 </tr>
               ) : (
                 filteredDeals.map((deal) => {
+                  const gradeMeta = getGradeMeta(deal.dealGrade);
                   const statusMeta = getValidationMeta(deal.validationStatus);
+                  const banMeta = getBanCoverageMeta(deal.banCoverage);
                   return (
                     <tr
                       key={deal.id}
@@ -375,14 +415,21 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
                       <td className="px-5 py-3.5">
                         <div className="font-medium text-slate-900">{deal.nameEn}</div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-                          <span>{deal.stream === 'physical' ? 'Physical' : 'Digital AI'}</span>
+                          <span className="font-medium text-slate-700">
+                            {getProductTypeLabel(deal.productType)}
+                          </span>
                           <span aria-hidden="true">·</span>
                           <span className="font-persian">{deal.source}</span>
                           {deal.currency !== 'TOMAN' && (
                             <>
                               <span aria-hidden="true">·</span>
                               <span className="font-mono text-[11px] text-slate-600">
-                                {formatNativeCost(deal.sourceCost, deal.currency, deal.networkFeeUsd)}
+                                {formatNativeCost(
+                                  deal.sourceCost,
+                                  deal.currency,
+                                  deal.networkFeeUsd,
+                                  deal.gatewayFeePct,
+                                )}
                               </span>
                             </>
                           )}
@@ -408,33 +455,41 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
 
                       <td
                         className={`px-4 py-3.5 text-right font-mono tabular-nums font-semibold whitespace-nowrap ${
-                          deal.isDeal
+                          deal.dealGrade === 'A+'
                             ? 'text-emerald-700'
-                            : deal.marginPct >= state.config.minMarginPct
-                              ? 'text-amber-700'
-                              : 'text-slate-600'
+                            : deal.dealGrade === 'A'
+                              ? 'text-slate-900'
+                              : deal.dealGrade === 'MANUAL_REVIEW'
+                                ? 'text-amber-700'
+                                : 'text-slate-500'
                         }`}
                       >
                         {deal.marginPct.toFixed(1)}%
                       </td>
 
-                      <td className="px-4 py-3.5 text-right font-mono tabular-nums text-slate-700 whitespace-nowrap">
-                        {deal.maxUnitsWithinBudget}{' '}
-                        <span className="text-xs text-slate-400">({deal.maxUnitsWithinCap})</span>
+                      <td className="px-4 py-3.5 text-xs whitespace-nowrap">
+                        <div className={`font-medium ${banMeta.textClass}`}>{banMeta.label}</div>
+                        <div className="mt-0.5 text-[11px] text-slate-500">
+                          {deal.deliveryMethod} · {deal.paymentNetwork}
+                        </div>
                       </td>
 
                       <td className="px-5 py-3.5 whitespace-nowrap">
-                        <div className={`inline-flex items-center gap-1.5 text-xs font-medium ${statusMeta.textClass}`}>
+                        <div className={`inline-flex items-center gap-1.5 text-xs font-semibold ${gradeMeta.textClass}`}>
                           {deal.isDeal ? (
                             <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                          ) : deal.manualReviewRequired ? (
+                            <Eye className="h-3.5 w-3.5 shrink-0" />
                           ) : (
                             <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
                           )}
-                          <span>{statusMeta.label}</span>
+                          <span>{gradeMeta.label}</span>
                         </div>
-                        {!deal.isNewAlert && deal.isDeal && (
-                          <div className="mt-0.5 text-[11px] text-slate-400">6h dedupe active</div>
-                        )}
+                        <div className="mt-0.5 text-[11px] text-slate-500">
+                          {deal.isDeal
+                            ? `${deal.maxUnitsWithinBudget} units · ${deal.isNewAlert ? 'Ready' : '6h cooldown'}`
+                            : statusMeta.label}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -445,17 +500,17 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
         </div>
       </section>
 
-      {/* Scan Execution Log & 6-Hour Deduplication Memory */}
+      {/* Scan Execution Log */}
       <section className="rounded-lg border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-3.5">
           <div>
             <h2 className="text-sm font-semibold text-slate-900">Recent Radar Scans</h2>
             <p className="text-xs text-slate-500">
-              6-hour deduplication memory currently tracking{' '}
+              6-hour deduplication memory (Node R4) tracking{' '}
               <span className="font-mono tabular-nums font-medium text-slate-800">
                 {state.summary.dedupedActiveCount}
               </span>{' '}
-              dispatched alert keys.
+              alerted signal keys.
             </p>
           </div>
           {state.summary.dedupedActiveCount > 0 && (
@@ -475,10 +530,10 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
               <tr className="border-b border-slate-100 text-slate-500">
                 <th className="px-5 py-2.5 font-medium">Run Time</th>
                 <th className="px-4 py-2.5 text-right font-medium">USDT / TMN</th>
-                <th className="px-4 py-2.5 text-right font-medium">Items Evaluated</th>
-                <th className="px-4 py-2.5 text-right font-medium">Verified Deals</th>
-                <th className="px-4 py-2.5 text-right font-medium">Fake / Scam Blocked</th>
-                <th className="px-5 py-2.5 text-right font-medium">New Alert Cards</th>
+                <th className="px-4 py-2.5 text-right font-medium">Evaluated</th>
+                <th className="px-4 py-2.5 text-right font-medium">Grade A+ / A</th>
+                <th className="px-4 py-2.5 text-right font-medium">Manual Review</th>
+                <th className="px-5 py-2.5 text-right font-medium">Dropped</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-mono tabular-nums text-slate-700">
@@ -495,10 +550,10 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
                   <td className="px-4 py-2.5 text-right">{run.usdtToman.toLocaleString('en-US')}</td>
                   <td className="px-4 py-2.5 text-right">{run.totalScanned}</td>
                   <td className="px-4 py-2.5 text-right font-medium text-emerald-700">
-                    {run.verifiedDeals}
+                    {run.goldenDeals} A+ / {Math.max(0, run.verifiedDeals - run.goldenDeals)} A
                   </td>
-                  <td className="px-4 py-2.5 text-right text-red-700">{run.rejectedFakeOrScam}</td>
-                  <td className="px-5 py-2.5 text-right">{run.newAlertsQueued}</td>
+                  <td className="px-4 py-2.5 text-right text-amber-700">{run.manualReviewCount}</td>
+                  <td className="px-5 py-2.5 text-right text-red-700">{run.rejectedFakeOrCap}</td>
                 </tr>
               ))}
             </tbody>

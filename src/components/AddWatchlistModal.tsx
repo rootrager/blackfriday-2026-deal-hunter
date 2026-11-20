@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import type { CurrencyCode, FxSnapshot, StreamType, WatchlistItem } from '../types/arbitrage';
+import type {
+  BanCoverage,
+  CurrencyCode,
+  FxSnapshot,
+  ProductType,
+  WatchlistItem,
+} from '../types/arbitrage';
 import { formatToman } from '../utils/formatters';
 
 interface AddWatchlistModalProps {
@@ -16,15 +22,18 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
   onClose,
   onAdd,
 }) => {
-  const [stream, setStream] = useState<StreamType>('physical');
+  const [productType, setProductType] = useState<ProductType>('physical_tech');
   const [nameEn, setNameEn] = useState('');
   const [nameFa, setNameFa] = useState('');
   const [source, setSource] = useState('تکنولایف · فلش‌سیل');
   const [currency, setCurrency] = useState<CurrencyCode>('TOMAN');
+  const [paymentNetwork, setPaymentNetwork] = useState('Shaparak');
   const [sourceCost, setSourceCost] = useState('2500000');
   const [networkFeeUsd, setNetworkFeeUsd] = useState('0');
+  const [gatewayFeePct, setGatewayFeePct] = useState('0');
   const [beforeDiscount, setBeforeDiscount] = useState('3200000');
   const [marketBenchmark, setMarketBenchmark] = useState('3250000');
+  const [banCoverage, setBanCoverage] = useState<BanCoverage>('supported');
   const [buyLink, setBuyLink] = useState('https://www.technolife.ir');
   const [isC2C, setIsC2C] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -33,36 +42,56 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
 
   const parsedCost = Number(sourceCost) || 0;
   const parsedGas = Number(networkFeeUsd) || 0;
+  const parsedFeePct = Number(gatewayFeePct) || 0;
   const parsedMarket = Number(marketBenchmark) || 0;
+  const feeMul = 1 + parsedFeePct / 100;
 
   const estimatedTomanCost =
     currency === 'TOMAN'
-      ? parsedCost
-      : currency === 'USDT'
-        ? Math.round((parsedCost + parsedGas) * fx.usdtToman)
-        : Math.round((parsedCost * fx.cnyToUsd + parsedGas) * fx.usdtToman);
+      ? Math.round(parsedCost * feeMul)
+      : currency === 'USDT' || currency === 'USDC'
+        ? Math.round((parsedCost * feeMul + parsedGas) * fx.usdtToman)
+        : Math.round((parsedCost * fx.cnyToUsd * feeMul + parsedGas) * fx.usdtToman);
   const estimatedProfit = parsedMarket - estimatedTomanCost;
   const estimatedMargin =
     estimatedTomanCost > 0 ? ((estimatedProfit / estimatedTomanCost) * 100).toFixed(1) : '0.0';
 
-  const handleStreamSwitch = (next: StreamType) => {
-    setStream(next);
-    if (next === 'digital') {
+  const handleProductTypeSwitch = (next: ProductType) => {
+    setProductType(next);
+    if (next === 'consumer_subscription') {
       setCurrency('USDT');
+      setPaymentNetwork('BSC/BEP20');
       setSource('AIPAY99 · BEP20');
       setSourceCost('20');
       setNetworkFeeUsd('0.15');
+      setGatewayFeePct('0');
       setBeforeDiscount('');
       setMarketBenchmark('6500000');
-      setBuyLink('https://aipay99.com');
+      setBanCoverage('excluded');
+      setBuyLink('https://aipay99.com/en/');
+      setIsC2C(false);
+    } else if (next === 'api_credit') {
+      setCurrency('USDC');
+      setPaymentNetwork('Base / Polygon');
+      setSource('OpenRouter · USDC');
+      setSourceCost('50');
+      setNetworkFeeUsd('0.20');
+      setGatewayFeePct('5.5');
+      setBeforeDiscount('');
+      setMarketBenchmark('17800000');
+      setBanCoverage('supported');
+      setBuyLink('https://openrouter.ai/pricing');
       setIsC2C(false);
     } else {
       setCurrency('TOMAN');
+      setPaymentNetwork('Shaparak');
       setSource('تکنولایف · فلش‌سیل');
       setSourceCost('2500000');
       setNetworkFeeUsd('0');
+      setGatewayFeePct('0');
       setBeforeDiscount('3200000');
       setMarketBenchmark('3250000');
+      setBanCoverage('supported');
       setBuyLink('https://www.technolife.ir');
     }
   };
@@ -73,14 +102,17 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
     setSubmitting(true);
     try {
       await onAdd({
-        stream,
+        productType,
+        stream: productType === 'physical_tech' ? 'physical' : 'digital',
         nameEn: nameEn.trim(),
         nameFa: nameFa.trim() || nameEn.trim(),
-        category: stream === 'digital' ? 'دیجیتال / هوش مصنوعی' : 'فیزیکی / تکنولوژی',
         source: source.trim(),
         currency,
+        paymentAsset: currency === 'TOMAN' ? 'TMN' : currency,
+        paymentNetwork: paymentNetwork.trim(),
         sourceCost: parsedCost,
         networkFeeUsd: parsedGas,
+        gatewayFeePct: parsedFeePct,
         priceBeforeDiscountToman: beforeDiscount.trim() ? Number(beforeDiscount) : null,
         declaredDiscountPct:
           beforeDiscount.trim() && Number(beforeDiscount) > estimatedTomanCost
@@ -89,6 +121,7 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
               )
             : 0,
         marketBenchmarkToman: parsedMarket,
+        banCoverage,
         buyLink: buyLink.trim() || 'https://www.technolife.ir',
         isC2C,
       });
@@ -106,7 +139,7 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-lg border border-slate-200 bg-white shadow-xl"
+        className="w-full max-w-xl rounded-lg border border-slate-200 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
@@ -122,29 +155,40 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
-          {/* Stream Selector */}
-          <div className="flex items-center gap-1 rounded-md bg-slate-100 p-1">
+          {/* Isolated 3-Track Product Type Selector */}
+          <div className="grid grid-cols-3 gap-1 rounded-md bg-slate-100 p-1">
             <button
               type="button"
-              onClick={() => handleStreamSwitch('physical')}
-              className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
-                stream === 'physical'
+              onClick={() => handleProductTypeSwitch('physical_tech')}
+              className={`rounded px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                productType === 'physical_tech'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Stream A · Physical Tech
+              Physical Tech
             </button>
             <button
               type="button"
-              onClick={() => handleStreamSwitch('digital')}
-              className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
-                stream === 'digital'
+              onClick={() => handleProductTypeSwitch('consumer_subscription')}
+              className={`rounded px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                productType === 'consumer_subscription'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Stream B · Digital AI (Crypto)
+              Consumer AI Sub
+            </button>
+            <button
+              type="button"
+              onClick={() => handleProductTypeSwitch('api_credit')}
+              className={`rounded px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                productType === 'api_credit'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              API Credit Gateway
             </button>
           </div>
 
@@ -173,9 +217,9 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
             </label>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="block text-xs font-medium text-slate-700">
-              Sourcing Feed / Seller
+              Sourcing Feed
               <input
                 type="text"
                 value={source}
@@ -184,20 +228,30 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
               />
             </label>
             <label className="block text-xs font-medium text-slate-700">
-              Settlement Currency
+              Currency Basis
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
                 className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none"
               >
                 <option value="TOMAN">Iranian Toman (TMN)</option>
-                <option value="USDT">USDT (Crypto BEP20 / TRC20)</option>
+                <option value="USDT">USDT (Crypto)</option>
+                <option value="USDC">USDC (API Gateway)</option>
                 <option value="CNY">Chinese Yuan (CNY)</option>
               </select>
             </label>
+            <label className="block text-xs font-medium text-slate-700">
+              Payment Network
+              <input
+                type="text"
+                value={paymentNetwork}
+                onChange={(e) => setPaymentNetwork(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none"
+              />
+            </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label className="block text-xs font-medium text-slate-700">
               Cost ({currency})
               <input
@@ -234,7 +288,7 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
               </label>
             ) : (
               <label className="block text-xs font-medium text-slate-700">
-                Network Gas (USD)
+                Gas Fee (USD)
                 <input
                   type="number"
                   step="0.05"
@@ -244,6 +298,18 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
                 />
               </label>
             )}
+            <label className="block text-xs font-medium text-slate-700">
+              Ban Coverage
+              <select
+                value={banCoverage}
+                onChange={(e) => setBanCoverage(e.target.value as BanCoverage)}
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs text-slate-900 focus:border-slate-900 focus:outline-none"
+              >
+                <option value="supported">Supported</option>
+                <option value="excluded">Excluded</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </label>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 items-center">
@@ -256,7 +322,7 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none"
               />
             </label>
-            {stream === 'physical' && (
+            {productType === 'physical_tech' ? (
               <label className="mt-4 flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
                 <input
                   type="checkbox"
@@ -264,7 +330,18 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
                   onChange={(e) => setIsC2C(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 text-slate-900"
                 />
-                Apply Divar C2C 40% Scam Floor
+                Route &lt;40% Torob C2C to Manual Review
+              </label>
+            ) : (
+              <label className="block text-xs font-medium text-slate-700">
+                Gateway Checkout Fee (%)
+                <input
+                  type="number"
+                  step="0.5"
+                  value={gatewayFeePct}
+                  onChange={(e) => setGatewayFeePct(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm text-slate-900 focus:border-slate-900 focus:outline-none"
+                />
               </label>
             )}
           </div>
@@ -272,7 +349,7 @@ export const AddWatchlistModal: React.FC<AddWatchlistModalProps> = ({
           {/* Live Calculation Preview */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-4 text-xs">
             <div className="text-slate-600">
-              Normalized Cost:{' '}
+              Landed Cost:{' '}
               <span className="font-mono tabular-nums font-medium text-slate-900">
                 {formatToman(estimatedTomanCost)}
               </span>

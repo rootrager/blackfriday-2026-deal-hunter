@@ -10,7 +10,13 @@ import {
   X,
 } from 'lucide-react';
 import type { EvaluatedDeal, FxSnapshot } from '../types/arbitrage';
-import { formatNativeCost, formatToman, getValidationMeta } from '../utils/formatters';
+import {
+  formatNativeCost,
+  formatToman,
+  getBanCoverageMeta,
+  getGradeMeta,
+  getProductTypeLabel,
+} from '../utils/formatters';
 
 interface DealInspectorDrawerProps {
   deal: EvaluatedDeal | null;
@@ -27,7 +33,7 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
   onUpdate,
   onDelete,
 }) => {
-  const [cardFormat, setCardFormat] = useState<'html' | 'markdown'>('html');
+  const [cardFormat, setCardFormat] = useState<'html' | 'markdown' | 'canonical'>('html');
   const [copied, setCopied] = useState(false);
   const [sourceCost, setSourceCost] = useState('');
   const [marketBenchmark, setMarketBenchmark] = useState('');
@@ -49,9 +55,14 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
 
   if (!deal) return null;
 
-  const statusMeta = getValidationMeta(deal.validationStatus);
+  const gradeMeta = getGradeMeta(deal.dealGrade);
+  const banMeta = getBanCoverageMeta(deal.banCoverage);
   const activePayload =
-    cardFormat === 'html' ? deal.telegramHtmlCard : deal.telegramMarkdownCard;
+    cardFormat === 'html'
+      ? deal.telegramHtmlCard
+      : cardFormat === 'markdown'
+        ? deal.telegramMarkdownCard
+        : JSON.stringify(deal.canonicalSignal, null, 2);
 
   const handleCopy = async () => {
     try {
@@ -59,7 +70,7 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      // Fallback ignored if clipboard is blocked
+      // Clipboard fallback ignored
     }
   };
 
@@ -90,10 +101,12 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span>{deal.stream === 'physical' ? 'Stream A · Physical Tech' : 'Stream B · Digital AI'}</span>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span>{getProductTypeLabel(deal.productType)}</span>
               <span aria-hidden="true">·</span>
-              <span className={`font-medium ${statusMeta.textClass}`}>{statusMeta.label}</span>
+              <span className={`font-semibold ${gradeMeta.textClass}`}>{gradeMeta.label}</span>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono text-[11px]">{deal.canonicalSignal.tracking_id}</span>
             </div>
             <h2 className="mt-1 text-lg font-semibold text-slate-900">{deal.nameEn}</h2>
             <p className="font-persian mt-0.5 text-sm text-slate-600" dir="rtl">
@@ -112,13 +125,15 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
-          {/* Validation Audit */}
+          {/* Anti-Fraud & Warranty Audit */}
           <section>
-            <h3 className="text-sm font-semibold text-slate-900">Validation Audit</h3>
+            <h3 className="text-sm font-semibold text-slate-900">
+              Anti-Fraud, Liquidity & Warranty Audit (Phase 5)
+            </h3>
             <p className="mt-1 text-xs text-slate-600">{deal.validationReason}</p>
             <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-y border-slate-200 py-4 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">Discount Authenticity</span>
+                <span className="text-slate-500">Discount Guard (V2)</span>
                 <span
                   className={`inline-flex items-center gap-1 font-medium ${
                     deal.discountVerified ? 'text-emerald-700' : 'text-red-700'
@@ -129,14 +144,14 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
                   ) : (
                     <ShieldAlert className="h-3.5 w-3.5" />
                   )}
-                  {deal.discountVerified ? 'Verified' : 'Flagged Fake'}
+                  {deal.discountVerified ? 'Verified' : 'Fake Promo'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">Divar Scam Floor</span>
+                <span className="text-slate-500">Divar &lt;40% Filter (V3)</span>
                 <span
                   className={`inline-flex items-center gap-1 font-medium ${
-                    deal.passesScamFloor ? 'text-emerald-700' : 'text-red-700'
+                    deal.passesScamFloor ? 'text-emerald-700' : 'text-amber-700'
                   }`}
                 >
                   {deal.passesScamFloor ? (
@@ -144,23 +159,31 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
                   ) : (
                     <ShieldAlert className="h-3.5 w-3.5" />
                   )}
-                  {deal.isC2C ? (deal.passesScamFloor ? 'Passed' : 'Below 40%') : 'N/A'}
+                  {deal.isC2C ? (deal.passesScamFloor ? 'Passed' : 'Manual Review') : 'N/A'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">Single-Item Cap</span>
+                <span className="text-slate-500">Liquidity Cap (V4)</span>
                 <span
                   className={`font-medium ${
                     deal.withinItemCap ? 'text-emerald-700' : 'text-amber-700'
                   }`}
                 >
-                  {deal.withinItemCap ? 'Within Limit' : 'Exceeds 35M Cap'}
+                  {deal.withinItemCap ? 'Within Cap' : 'Exceeds Cap'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">6h Alert Dedupe</span>
-                <span className="font-medium text-slate-800">
-                  {deal.isNewAlert ? 'Ready to Dispatch' : 'Cooldown Active'}
+                <span className="text-slate-500">Ban Coverage (V7)</span>
+                <span className={`font-medium ${banMeta.textClass}`}>{banMeta.label}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Delivery Method</span>
+                <span className="font-medium text-slate-800">{deal.deliveryMethod}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Payment Rail (V5)</span>
+                <span className="font-mono text-slate-800">
+                  {deal.paymentAsset} · {deal.paymentNetwork}
                 </span>
               </div>
             </div>
@@ -168,28 +191,35 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
 
           {/* Financial Breakdown */}
           <section>
-            <h3 className="text-sm font-semibold text-slate-900">Financial Normalization</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Quantitative Math (Phase 6)</h3>
             <dl className="mt-3 divide-y divide-slate-100 border-y border-slate-200 text-sm">
               <div className="flex items-center justify-between py-2.5">
                 <dt className="text-slate-500">Native Source Price</dt>
                 <dd className="font-mono tabular-nums text-slate-900">
-                  {formatNativeCost(deal.sourceCost, deal.currency, deal.networkFeeUsd)}
+                  {formatNativeCost(
+                    deal.sourceCost,
+                    deal.currency,
+                    deal.networkFeeUsd,
+                    deal.gatewayFeePct,
+                  )}
                 </dd>
               </div>
               <div className="flex items-center justify-between py-2.5">
-                <dt className="text-slate-500">Normalized Cost (USDT @ {fx.usdtToman.toLocaleString('en-US')})</dt>
+                <dt className="text-slate-500">
+                  Total Landed Cost (USDT @ {fx.usdtToman.toLocaleString('en-US')})
+                </dt>
                 <dd className="font-mono tabular-nums font-medium text-slate-900">
                   {formatToman(deal.costInToman)}
                 </dd>
               </div>
               <div className="flex items-center justify-between py-2.5">
-                <dt className="text-slate-500">Market Benchmark (Torob Median)</dt>
+                <dt className="text-slate-500">Market Benchmark (Torob / Retail)</dt>
                 <dd className="font-mono tabular-nums text-slate-900">
                   {formatToman(deal.marketBenchmarkToman)}
                 </dd>
               </div>
               <div className="flex items-center justify-between py-2.5">
-                <dt className="text-slate-500">Net Unit Profit</dt>
+                <dt className="text-slate-500">Net Unit Profit & ROI</dt>
                 <dd
                   className={`font-mono tabular-nums font-semibold ${
                     deal.netProfitToman >= 0 ? 'text-emerald-700' : 'text-red-700'
@@ -200,7 +230,7 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
                 </dd>
               </div>
               <div className="flex items-center justify-between py-2.5">
-                <dt className="text-slate-500">Max Units (100M Budget / 35M Cap)</dt>
+                <dt className="text-slate-500">Budget Capacity (100M / Cap)</dt>
                 <dd className="font-mono tabular-nums text-slate-900">
                   {deal.maxUnitsWithinBudget} total · {deal.maxUnitsWithinCap} capped
                 </dd>
@@ -208,7 +238,7 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
             </dl>
           </section>
 
-          {/* Quick Live Price Editor */}
+          {/* Live Price Editor */}
           <section>
             <h3 className="text-sm font-semibold text-slate-900">Adjust Pricing Parameters</h3>
             <form onSubmit={handleSave} className="mt-3 space-y-3">
@@ -224,7 +254,7 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
                   />
                 </label>
                 <label className="block text-xs text-slate-600">
-                  Torob / Market Median (TMN)
+                  Market Benchmark (TMN)
                   <input
                     type="number"
                     step="10000"
@@ -271,10 +301,12 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
             </form>
           </section>
 
-          {/* Telegram Deal Card Preview */}
+          {/* Telegram Alert & Canonical Schema Preview */}
           <section>
-            <div className="flex items-center justify-between gap-4">
-              <h3 className="text-sm font-semibold text-slate-900">Telegram Alert Card Preview</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-900">
+                Dispatch Payload & Canonical Schema
+              </h3>
               <div className="flex items-center gap-1 rounded-md bg-slate-100 p-0.5">
                 <button
                   type="button"
@@ -298,17 +330,34 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
                 >
                   Hermes Text
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setCardFormat('canonical')}
+                  className={`rounded px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                    cardFormat === 'canonical'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Canonical JSON
+                </button>
               </div>
             </div>
 
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <pre
-                dir="rtl"
-                className="font-persian whitespace-pre-wrap text-right text-xs leading-6 text-slate-800"
-              >
+            {cardFormat === 'canonical' ? (
+              <pre className="mt-3 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-slate-950 p-4 font-mono text-xs leading-5 text-slate-100">
                 {activePayload}
               </pre>
-            </div>
+            ) : (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <pre
+                  dir="rtl"
+                  className="font-persian whitespace-pre-wrap text-right text-xs leading-6 text-slate-800"
+                >
+                  {activePayload}
+                </pre>
+              </div>
+            )}
 
             <div className="mt-3 flex items-center justify-between gap-3">
               <a
@@ -326,7 +375,7 @@ export const DealInspectorDrawer: React.FC<DealInspectorDrawerProps> = ({
                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 transition-colors hover:bg-slate-50 whitespace-nowrap"
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                {copied ? 'Copied Payload' : 'Copy Alert Text'}
+                {copied ? 'Copied Payload' : 'Copy Payload'}
               </button>
             </div>
           </section>
