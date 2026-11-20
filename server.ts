@@ -372,633 +372,71 @@ function sanitizeWorkflowJson(raw: Record<string, unknown>): Record<string, unkn
       /https:\/\/api\.telegram\.org\/bot[0-9]+:[A-Za-z0-9_-]+\/sendMessage/g,
       'https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage',
     )
-    .replace(/"chat_id"\s*:\s*"[0-9]+"/g, '"chat_id": "{{ $env.TELEGRAM_CHAT_ID }}"');
+    .replace(/"chat_id"\s*:\s*"[0-9]+"/g, '"chat_id": "{{ $env.TELEGRAM_CHAT_ID }}"')
+    .replace(/chat_id:\s*'[0-9]+'/g, "chat_id: $env.TELEGRAM_CHAT_ID");
   return JSON.parse(serialized) as Record<string, unknown>;
 }
 
-function buildEnterprise54NodeWorkflow(config: EngineConfig): {
-  json: Record<string, unknown>;
-  phases: WorkflowPhaseInfo[];
-} {
-  type NodeSpec = {
-    id: string;
-    name: string;
-    type: string;
-    typeVersion: number;
-    role: string;
-    phase: number;
-    parameters: Record<string, unknown>;
-    onError?: string;
-  };
+const NODE_ROLE_MAP: Record<string, string> = {
+  T1: 'Primary 20-minute automated Black Friday scan cycle',
+  T2: 'On-demand POST trigger for immediate deal verification',
+  T3: 'Clears 6-hour deduplication static memory on demand',
+  T4: 'Nightly Torob historical baseline & supplier catalog refresh',
+  FX1: 'Fetches live USDTTMN lastPrice from Wallex exchange with error branch',
+  FX2: 'Fetches domestic free-market USD, EUR, AED reference rates',
+  FX3: 'Computes Chinese Yuan parity for AIPAY99/SuZhe CNY catalogs',
+  FX4: 'Estimates MetaMask BEP20 ($0.15) & TRON TRC20 ($1.00) gas costs',
+  FX5: 'Merges Wallex, TGJU, CNY, and gas data into a single FX context',
+  FX6: 'Persists last-known-good FX snapshot in $getWorkflowStaticData',
+  W1: 'Apple 20W B/A Charger & AirPods Pro 2 watchlist',
+  W2: 'PS5 Slim Disc & DualSense Wireless Controllers watchlist',
+  W3: '1TB NVMe PCIe 4.0 internal SSDs watchlist',
+  W4: 'Clean & suspicious Divar Tehran C2C iPhone 13/14 watchlist + aggregator',
+  W5: 'ChatGPT Plus & Claude Pro dedicated accounts',
+  W6: 'Cursor Pro & AI coding CNY CDK packs',
+  W7: 'Midjourney Standard creative subscription watchlist',
+  W8: 'Isolated API usage credits (OpenRouter USDC & TeamoRouter USDT)',
+  C1: 'Queries Torob median market liquidity benchmark per SKU',
+  C2: 'Checks 30-day floor price to detect pre-Black-Friday inflation',
+  C3: 'Scans Digikala Harajomeh timed flash offers per SKU',
+  C4: 'Checks lowest verified seller buybox & stock status',
+  C5: 'Captures Technolife Black Friday discounted SKUs',
+  C6: 'Monitors BNPL/installment spreads vs cash floor',
+  C7: 'Collects used tech ads across Tehran districts per SKU',
+  C8: 'Filters valid prices and tags فوری C2C ads by SKU index',
+  C9: 'Fetches AIPAY99 consumer AI subscription storefront',
+  C10: 'Monitors SuZhe AI Cursor Pro & reseller catalog',
+  C11: 'Tracks OpenRouter USDC credit fee schedule (5.5%)',
+  C12: 'Monitors TeamoRouter multi-network prepaid API balance',
+  V1: 'Enforces strict CanonicalDealSignal schema across all 14 items & 3 product types',
+  V2: 'Verifies price_before_discount > sale_price; flags fake promos',
+  V3: 'Routes suspicious C2C listings (<40% of Torob median) to Manual Review',
+  V4: 'Blocks single physical SKUs exceeding 45M TMN liquidity ceiling',
+  V5: 'Validates exact payment network rail (BEP20/TRC20/Base/CNY/Shaparak)',
+  V6: 'Tags evidence_type and verification timestamp on every signal',
+  V7: 'Attaches Persian ban_coverage label (supported | excluded | unknown)',
+  V8: 'Computes Torob min-max spread volatility percentage',
+  M1: 'Calculates Total Landed Cost TMN across TOMAN, USDT, USDC, and CNY',
+  M2: 'Computes Net Profit = Market Benchmark - Total Landed Cost',
+  M3: 'Computes Net Margin % = (Net Profit / Total Cost) * 100',
+  M4: 'Calculates Cycle ROI % and USD equivalent unit cost',
+  M5: 'Computes floor(100M TMN / unit_cost) purchase capacity',
+  M6: 'Assigns deal_grade (A+ / A / MANUAL_REVIEW / DROP) & builds Persian HTML card',
+  R1: 'Splits pipeline into 4 strict branches: A+, A, Manual Review, Drop',
+  R2: 'Guards Grade A+ (>=30% & is_new_alert) before golden dispatch',
+  R3: 'Guards Grade A (>=18% & is_new_alert) before standard archive dispatch',
+  R4: 'Suppresses duplicate deal alerts within 6h & handles T3 emergency reset',
+  D1: 'Sends formatted Persian HTML Grade A+ card with inline buy button',
+  D2: 'Posts Grade A (18–30%) deals to Telegram standard feed',
+  D3: 'Dispatches high-risk <40% Divar C2C anomalies for admin review',
+  D4: 'Alerts admin on Wallex FX1 error while pipeline continues on fallback',
+  D5: 'Logs all 14 canonical deal signals once per cycle for P&L analysis',
+  D6: 'Produces single aggregate pipeline health summary JSON per run',
+};
 
-  const specs: NodeSpec[] = [
-    // Phase 1: Triggers & Time Management (4 nodes)
-    {
-      id: 'T1',
-      name: 'T1. Schedule Trigger (Every 20m)',
-      type: 'n8n-nodes-base.scheduleTrigger',
-      typeVersion: 1.2,
-      role: 'Primary 20-minute automated Black Friday scan cycle',
-      phase: 1,
-      parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 20 }] } },
-    },
-    {
-      id: 'T2',
-      name: 'T2. Manual Live Test Webhook',
-      type: 'n8n-nodes-base.webhook',
-      typeVersion: 2,
-      role: 'On-demand POST trigger for immediate deal verification',
-      phase: 1,
-      parameters: { httpMethod: 'POST', path: 'bf2026-live-scan' },
-    },
-    {
-      id: 'T3',
-      name: 'T3. Emergency Reset Webhook',
-      type: 'n8n-nodes-base.webhook',
-      typeVersion: 2,
-      role: 'Clears 6-hour deduplication static memory on demand',
-      phase: 1,
-      parameters: { httpMethod: 'POST', path: 'bf2026-emergency-reset' },
-    },
-    {
-      id: 'T4',
-      name: 'T4. Nightly Sync Cron (00:30 IRST)',
-      type: 'n8n-nodes-base.scheduleTrigger',
-      typeVersion: 1.2,
-      role: 'Nightly Torob historical baseline & supplier catalog refresh',
-      phase: 1,
-      parameters: { rule: { interval: [{ field: 'hours', hoursInterval: 24 }] } },
-    },
-
-    // Phase 2: Macro Financial & FX Engine (6 nodes)
-    {
-      id: 'FX1',
-      name: 'FX1. Wallex Live USDT/TMN',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Fetches live USDTTMN lastPrice from Wallex exchange',
-      phase: 2,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'GET', url: 'https://api.wallex.ir/v1/markets', options: { timeout: 5000 } },
-    },
-    {
-      id: 'FX2',
-      name: 'FX2. TGJU Free FX (USD/EUR/AED)',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Fetches domestic free-market USD, EUR, AED reference rates',
-      phase: 2,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'http://172.17.0.1:3000/mcp/tgju', sendBody: true, specifyBody: 'json', jsonBody: '{"service":"tgju"}' },
-    },
-    {
-      id: 'FX3',
-      name: 'FX3. CNY/USD Parity Converter',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Computes Chinese Yuan parity for AIPAY99/SuZhe CNY catalogs',
-      phase: 2,
-      parameters: { jsCode: `return [{ json: { cny_to_usd: ${config.cnyToUsdRate} } }];` },
-    },
-    {
-      id: 'FX4',
-      name: 'FX4. Network Gas Estimator (BSC/TRC20)',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Estimates MetaMask BEP20 ($0.15) & TRON TRC20 ($1.00) gas costs',
-      phase: 2,
-      parameters: { jsCode: `return [{ json: { gas_bep20_usd: 0.15, gas_trc20_usd: 1.0, gas_base_usd: 0.2 } }];` },
-    },
-    {
-      id: 'FX5',
-      name: 'FX5. FX Toman Normalizer',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Merges USDT, USD, EUR, AED, and CNY into a single FX context object',
-      phase: 2,
-      parameters: {
-        jsCode: `const wallex = $('FX1. Wallex Live USDT/TMN').first()?.json;\nconst raw = parseFloat(wallex?.result?.symbols?.USDTTMN?.stats?.lastPrice);\nconst usdt = Number.isFinite(raw) ? Math.round(raw) : ${config.manualUsdtToman};\nreturn [{ json: { usdt_toman: usdt, cny_toman: Math.round(usdt * ${config.cnyToUsdRate}), fetched_at: new Date().toISOString() } }];`,
-      },
-    },
-    {
-      id: 'FX6',
-      name: 'FX6. FX Cache & Outage Fallback',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Persists last-known-good FX snapshot in $getWorkflowStaticData',
-      phase: 2,
-      parameters: {
-        jsCode: `const store = $getWorkflowStaticData('global');\nif ($json.usdt_toman > 10000) store.last_fx = $json;\nreturn [{ json: store.last_fx || { usdt_toman: ${config.manualUsdtToman}, cny_toman: ${Math.round(config.manualUsdtToman * config.cnyToUsdRate)} } }];`,
-      },
-    },
-
-    // Phase 3: Segmented Target Watchlists (8 nodes)
-    {
-      id: 'W1',
-      name: 'W1. Apple Ecosystem Watchlist',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Apple 20W B/A Charger, MagSafe, AirPods Pro 2',
-      phase: 3,
-      parameters: { jsCode: `return [{ json: { group: 'apple', product_type: 'physical_tech', query: 'آداپتور 20 وات اپل اصلی' } }];` },
-    },
-    {
-      id: 'W2',
-      name: 'W2. Gaming Consoles Watchlist',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'PS5 Slim Disc & DualSense Wireless Controllers',
-      phase: 3,
-      parameters: { jsCode: `return [{ json: { group: 'gaming', product_type: 'physical_tech', query: 'دسته dualsense ps5' } }];` },
-    },
-    {
-      id: 'W3',
-      name: 'W3. PC Hardware & NVMe SSD',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: '1TB NVMe PCIe 4.0 internal SSDs (26M–35M TMN band)',
-      phase: 3,
-      parameters: { jsCode: `return [{ json: { group: 'pc_ssd', product_type: 'physical_tech', query: 'ssd nvme 1tb' } }];` },
-    },
-    {
-      id: 'W4',
-      name: 'W4. Used C2C Mobile (iPhone 13/14)',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Clean registered C2C iPhone 13/14 listings on Divar Tehran',
-      phase: 3,
-      parameters: { jsCode: `return [{ json: { group: 'used_c2c', product_type: 'physical_tech', is_c2c: true, query: 'آیفون 13 128 تمیز' } }];` },
-    },
-    {
-      id: 'W5',
-      name: 'W5. Consumer AI Subscriptions',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'ChatGPT Plus & Claude Pro dedicated accounts',
-      phase: 3,
-      parameters: { jsCode: `return [{ json: { group: 'ai_consumer', product_type: 'consumer_subscription', skus: ['chatgpt-plus', 'claude-pro'] } }];` },
-    },
-    {
-      id: 'W6',
-      name: 'W6. AI Coding IDEs (Cursor Pro)',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Cursor Pro & AI coding CDK packs',
-      phase: 3,
-      parameters: { jsCode: `return [{ json: { group: 'ai_coding', product_type: 'consumer_subscription', skus: ['cursor-pro', 'codex-reseller-cny'] } }];` },
-    },
-    {
-      id: 'W7',
-      name: 'W7. Creative & Media Tools',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Midjourney, Adobe CC, Figma & JetBrains watchlist',
-      phase: 3,
-      parameters: { jsCode: `return [{ json: { group: 'creative_media', product_type: 'consumer_subscription', skus: ['midjourney-std'] } }];` },
-    },
-    {
-      id: 'W8',
-      name: 'W8. API Credit Gateways',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Isolated API usage credits (OpenRouter / TeamoRouter / Kunavo)',
-      phase: 3,
-      parameters: { jsCode: `return [{ json: { group: 'api_credits', product_type: 'api_credit', skus: ['openrouter-api-100', 'teamorouter-api-100'] } }];` },
-    },
-
-    // Phase 4: Specialized Data Collectors (12 nodes)
-    {
-      id: 'C1',
-      name: 'C1. Torob Median Baseline',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Queries Torob median market liquidity benchmark',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'http://172.17.0.1:3000/mcp/torob', sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify({ query: $json.query || "آداپتور 20 وات اپل" }) }}' },
-    },
-    {
-      id: 'C2',
-      name: 'C2. Torob Price History',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Checks 30-day floor price to detect pre-Black-Friday inflation',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'http://172.17.0.1:3000/mcp/torob', sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify({ query: $json.query, mode: "history" }) }}' },
-    },
-    {
-      id: 'C3',
-      name: 'C3. Digikala Flash Campaigns',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Scans Digikala Harajomeh timed flash offers',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'http://172.17.0.1:3000/mcp/digikala', sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify({ query: $json.query }) }}' },
-    },
-    {
-      id: 'C4',
-      name: 'C4. Digikala Buybox Offers',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Checks lowest verified seller buybox & stock status',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'http://172.17.0.1:3000/mcp/digikala', sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify({ query: $json.query, mode: "buybox" }) }}' },
-    },
-    {
-      id: 'C5',
-      name: 'C5. Technolife Flash Deals',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Captures Technolife Black Friday discounted SKUs',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'http://172.17.0.1:3000/mcp/technolife', sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify({ query: $json.query }) }}' },
-    },
-    {
-      id: 'C6',
-      name: 'C6. Technolife Installment Rates',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Monitors BNPL/installment spreads vs cash floor',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'http://172.17.0.1:3000/mcp/technolife', sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify({ query: $json.query, mode: "installments" }) }}' },
-    },
-    {
-      id: 'C7',
-      name: 'C7. Divar Tehran C2C Ads',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Collects clean used tech ads across Tehran districts',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'http://172.17.0.1:3000/mcp/divar', sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify({ query: $json.query }) }}' },
-    },
-    {
-      id: 'C8',
-      name: 'C8. Divar Urgent Tag Filter',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Prioritizes C2C ads flagged فوری with purchase invoice',
-      phase: 4,
-      parameters: { jsCode: `return items.filter(i => i.json);` },
-    },
-    {
-      id: 'C9',
-      name: 'C9. AIPAY99 USDT Storefront',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Fetches consumer AI subscription stock & USDT BEP20 pricing',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'GET', url: 'https://aipay99.com/en/', options: { timeout: 6000 } },
-    },
-    {
-      id: 'C10',
-      name: 'C10. SuZhe AI Storefront',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Monitors Cursor Pro & reseller agent catalog pricing',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'GET', url: 'https://suzhe.ai/', options: { timeout: 6000 } },
-    },
-    {
-      id: 'C11',
-      name: 'C11. OpenRouter USDC Gateway',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Tracks API credit fee schedule (5.5% std / 8% biz)',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'GET', url: 'https://openrouter.ai/pricing', options: { timeout: 6000 } },
-    },
-    {
-      id: 'C12',
-      name: 'C12. TeamoRouter Multi-Net',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Monitors BEP20/TRC20/Base prepaid API balance minimums',
-      phase: 4,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'GET', url: 'https://teamorouter.com/blogs/ai-api-crypto-payment', options: { timeout: 6000 } },
-    },
-
-    // Phase 5: Data Sanitization & Anti-Fraud Layer (8 nodes)
-    {
-      id: 'V1',
-      name: 'V1. Canonical JSON Schema Normalizer',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Enforces strict CanonicalDealSignal schema across all 3 product types',
-      phase: 5,
-      parameters: { jsCode: `return items.map((item, i) => ({ json: { tracking_id: 'deal-2026-bf-' + String(i+1).padStart(3,'0'), ...item.json } }));` },
-    },
-    {
-      id: 'V2',
-      name: 'V2. Fake Discount Detector',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Verifies price_before_discount > sale_price; flags fake Harajomeh banners',
-      phase: 5,
-      parameters: { jsCode: `return items.map(i => ({ json: { ...i.json, discount_verified: i.json.before ? i.json.before > i.json.cost : true } }));` },
-    },
-    {
-      id: 'V3',
-      name: 'V3. Divar <40% Manual Review Filter',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Routes suspicious C2C listings (<40% of Torob median) to Admin Manual Review',
-      phase: 5,
-      parameters: { jsCode: `const FLOOR = ${config.divarScamFloorRatio};\nreturn items.map(i => ({ json: { ...i.json, manual_review_required: Boolean(i.json.is_c2c && i.json.total_cost_toman < i.json.market_benchmark_toman * FLOOR) } }));` },
-    },
-    {
-      id: 'V4',
-      name: 'V4. Liquidity Cap Guard (>45M TMN)',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Blocks single physical SKUs exceeding operational liquidity ceiling',
-      phase: 5,
-      parameters: { jsCode: `const CAP = ${config.maxItemCommitmentToman};\nreturn items.map(i => ({ json: { ...i.json, within_liquidity_cap: i.json.product_type === 'physical_tech' ? i.json.total_cost_toman <= CAP : true } }));` },
-    },
-    {
-      id: 'V5',
-      name: 'V5. MetaMask Network Validator',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Ensures exact token/network match (AIPAY99=BEP20, Kunavo=TRC20/Base)',
-      phase: 5,
-      parameters: { jsCode: `return items;` },
-    },
-    {
-      id: 'V6',
-      name: 'V6. Evidence & Source Logger',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Tags evidence_type (live_api | proxy_snapshot | manual_entry)',
-      phase: 5,
-      parameters: { jsCode: `return items.map(i => ({ json: { ...i.json, evidence_type: 'live_http_collector' } }));` },
-    },
-    {
-      id: 'V7',
-      name: 'V7. Ban & Warranty Classifier',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Attaches ban_coverage (supported | excluded | unknown) for Apple Store disclosure',
-      phase: 5,
-      parameters: { jsCode: `return items.map(i => ({ json: { ...i.json, ban_coverage: i.json.ban_coverage || 'unknown' } }));` },
-    },
-    {
-      id: 'V8',
-      name: 'V8. Price Volatility Calculator',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Computes 7-day spread stability against Torob median',
-      phase: 5,
-      parameters: { jsCode: `return items;` },
-    },
-
-    // Phase 6: Quantitative Arbitrage Math Engine (6 nodes)
-    {
-      id: 'M1',
-      name: 'M1. Total Landed Cost Engine',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Calculates Total Cost TMN = (raw_cost + fee + gas) * FX',
-      phase: 6,
-      parameters: { jsCode: `return items;` },
-    },
-    {
-      id: 'M2',
-      name: 'M2. Net Profit Calculator',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Computes Net Profit = Torob/Market Benchmark - Total Landed Cost',
-      phase: 6,
-      parameters: { jsCode: `return items.map(i => ({ json: { ...i.json, net_profit_toman: (i.json.market_benchmark_toman || 0) - (i.json.total_cost_toman || 0) } }));` },
-    },
-    {
-      id: 'M3',
-      name: 'M3. Net Margin % Calculator',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Computes Margin % = (Net Profit / Total Cost) * 100',
-      phase: 6,
-      parameters: { jsCode: `return items;` },
-    },
-    {
-      id: 'M4',
-      name: 'M4. Cycle ROI Calculator',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Calculates annualized & campaign cycle ROI',
-      phase: 6,
-      parameters: { jsCode: `return items;` },
-    },
-    {
-      id: 'M5',
-      name: 'M5. 100M TMN Budget Allocator',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Computes floor(budget / unit_cost) respecting liquidity cap',
-      phase: 6,
-      parameters: { jsCode: `const BUDGET = ${config.budgetToman};\nreturn items.map(i => ({ json: { ...i.json, budget_capacity_units: Math.floor(BUDGET / Math.max(1, i.json.total_cost_toman || 1)) } }));` },
-    },
-    {
-      id: 'M6',
-      name: 'M6. Deal Quality Grader (A+ / A / Review / Drop)',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Assigns deal_grade based on >=30% (A+), 18-30% (A), or Manual Review',
-      phase: 6,
-      parameters: { jsCode: `const GOLD = ${config.goldenMarginPct}; const MIN = ${config.minMarginPct};\nreturn items.map(i => { const g = i.json.manual_review_required ? 'MANUAL_REVIEW' : (i.json.margin_pct >= GOLD ? 'A+' : i.json.margin_pct >= MIN ? 'A' : 'DROP'); return { json: { ...i.json, deal_grade: g } }; });` },
-    },
-
-    // Phase 7: Decision Routing & Deduplication (4 nodes)
-    {
-      id: 'R1',
-      name: 'R1. 4-Branch Switch Router',
-      type: 'n8n-nodes-base.switch',
-      typeVersion: 3.2,
-      role: 'Splits pipeline into A+ Golden, A Standard, Manual Review, and Drop',
-      phase: 7,
-      parameters: { mode: 'rules', rules: { values: [{ outputKey: 'A+' }, { outputKey: 'A' }, { outputKey: 'MANUAL_REVIEW' }, { outputKey: 'DROP' }] } },
-    },
-    {
-      id: 'R2',
-      name: 'R2. Grade A+ Golden Filter (>30%)',
-      type: 'n8n-nodes-base.if',
-      typeVersion: 2.2,
-      role: 'Fast-tracks >30% verified opportunities to priority Telegram alert',
-      phase: 7,
-      parameters: { conditions: { conditions: [{ leftValue: '={{ $json.deal_grade }}', rightValue: 'A+', operator: { type: 'string', operation: 'equals' } }] } },
-    },
-    {
-      id: 'R3',
-      name: 'R3. Grade A Standard Filter (18–30%)',
-      type: 'n8n-nodes-base.if',
-      typeVersion: 2.2,
-      role: 'Routes standard profitable opportunities to archive feed',
-      phase: 7,
-      parameters: { conditions: { conditions: [{ leftValue: '={{ $json.deal_grade }}', rightValue: 'A', operator: { type: 'string', operation: 'equals' } }] } },
-    },
-    {
-      id: 'R4',
-      name: 'R4. 6-Hour Alert Deduplication Memory',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Suppresses duplicate deal alerts within 6 hours via $getWorkflowStaticData',
-      phase: 7,
-      parameters: { jsCode: `const store = $getWorkflowStaticData('global'); store.alerted = store.alerted || {}; const now = Date.now(); const hrs = ${config.dedupeWindowHours};\nfor (const k of Object.keys(store.alerted)) if (now - store.alerted[k] > hrs * 3600e3) delete store.alerted[k];\nreturn items.filter(i => { const k = i.json.tracking_id + '|' + i.json.total_cost_toman; if (store.alerted[k]) return false; store.alerted[k] = now; return true; });` },
-    },
-
-    // Phase 8: Omnichannel Dispatchers & Loggers (6 nodes)
-    {
-      id: 'D1',
-      name: 'D1. Telegram Golden Deal Card (Grade A+)',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Sends formatted Persian HTML card with Ban Coverage & Buy button',
-      phase: 8,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage', sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify({ chat_id: $env.TELEGRAM_CHAT_ID, parse_mode: "HTML", text: $json.telegram_html }) }}' },
-    },
-    {
-      id: 'D2',
-      name: 'D2. Telegram Standard Archive Feed (Grade A)',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Posts 18–30% deals to secondary monitoring channel',
-      phase: 8,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage', sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify({ chat_id: $env.TELEGRAM_ARCHIVE_CHAT_ID, parse_mode: "HTML", text: $json.telegram_html }) }}' },
-    },
-    {
-      id: 'D3',
-      name: 'D3. Admin Manual Review Queue (<40% Divar)',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Dispatches high-risk C2C anomalies for human verification',
-      phase: 8,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage', sendBody: true, specifyBody: 'json', jsonBody: '={{ JSON.stringify({ chat_id: $env.TELEGRAM_ADMIN_CHAT_ID, parse_mode: "HTML", text: $json.telegram_html }) }}' },
-    },
-    {
-      id: 'D4',
-      name: 'D4. Admin System Error Notifier',
-      type: 'n8n-nodes-base.httpRequest',
-      typeVersion: 4.2,
-      role: 'Alerts operator if Wallex or MCP collector fails repeatedly',
-      phase: 8,
-      onError: 'continueRegularOutput',
-      parameters: { method: 'POST', url: 'https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage', sendBody: true, specifyBody: 'json', jsonBody: '{"chat_id":"{{ $env.TELEGRAM_ADMIN_CHAT_ID }}","text":"Radar Collector Warning"}' },
-    },
-    {
-      id: 'D5',
-      name: 'D5. PostgreSQL / JSON Deal Ledger Logger',
-      type: 'n8n-nodes-base.code',
-      typeVersion: 2,
-      role: 'Appends canonical JSON signals for post-campaign P&L analysis',
-      phase: 8,
-      parameters: { jsCode: `return items.map(i => ({ json: { logged_at: new Date().toISOString(), ...i.json } }));` },
-    },
-    {
-      id: 'D6',
-      name: 'D6. Pipeline Health Summary Output',
-      type: 'n8n-nodes-base.respondToWebhook',
-      typeVersion: 1.1,
-      role: 'Returns JSON summary to manual webhook callers',
-      phase: 8,
-      parameters: { respondWith: 'allIncomingItems' },
-    },
-  ];
-
-  // Position nodes neatly in 8 vertical columns
-  const phaseRowCount = new Map<number, number>();
-  const n8nNodes = specs.map((spec) => {
-    const row = phaseRowCount.get(spec.phase) ?? 0;
-    phaseRowCount.set(spec.phase, row + 1);
-    const nodeObj: Record<string, unknown> = {
-      id: spec.id,
-      name: spec.name,
-      type: spec.type,
-      typeVersion: spec.typeVersion,
-      position: [(spec.phase - 1) * 320 + 80, row * 120 + 80],
-      parameters: spec.parameters,
-    };
-    if (spec.onError) nodeObj.onError = spec.onError;
-    return nodeObj;
-  });
-
-  // Wire sequential phase-to-phase connections cleanly
-  const connections: Record<string, { main: Array<Array<{ node: string; type: string; index: number }>> }> = {};
-  const connect = (fromId: string, toIds: string[]) => {
-    const fromNode = specs.find((s) => s.id === fromId);
-    if (!fromNode) return;
-    connections[fromNode.name] = {
-      main: [
-        toIds
-          .map((id) => specs.find((s) => s.id === id))
-          .filter((n): n is NodeSpec => Boolean(n))
-          .map((n) => ({ node: n.name, type: 'main', index: 0 })),
-      ],
-    };
-  };
-
-  // Phase 1 -> Phase 2
-  connect('T1', ['FX1', 'FX2', 'FX3', 'FX4']);
-  connect('T2', ['FX1', 'FX2']);
-  connect('T3', ['R4']);
-  connect('T4', ['FX1', 'C2']);
-  // Phase 2 -> FX5 -> FX6 -> Phase 3
-  connect('FX1', ['FX5']);
-  connect('FX2', ['FX5']);
-  connect('FX3', ['FX5']);
-  connect('FX4', ['FX5']);
-  connect('FX5', ['FX6']);
-  connect('FX6', ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8']);
-  // Phase 3 -> Phase 4
-  connect('W1', ['C1', 'C2', 'C3', 'C5']);
-  connect('W2', ['C1', 'C3', 'C4', 'C5', 'C6']);
-  connect('W3', ['C1', 'C5']);
-  connect('W4', ['C1', 'C7']);
-  connect('C7', ['C8']);
-  connect('W5', ['C9', 'C10']);
-  connect('W6', ['C10']);
-  connect('W7', ['C9']);
-  connect('W8', ['C11', 'C12']);
-  // Phase 4 -> Phase 5 Chain
-  ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C8', 'C9', 'C10', 'C11', 'C12'].forEach((id) =>
-    connect(id, ['V1']),
-  );
-  connect('V1', ['V2']);
-  connect('V2', ['V3']);
-  connect('V3', ['V4']);
-  connect('V4', ['V5']);
-  connect('V5', ['V6']);
-  connect('V6', ['V7']);
-  connect('V7', ['V8']);
-  // Phase 5 -> Phase 6 Chain
-  connect('V8', ['M1']);
-  connect('M1', ['M2']);
-  connect('M2', ['M3']);
-  connect('M3', ['M4']);
-  connect('M4', ['M5']);
-  connect('M5', ['M6']);
-  // Phase 6 -> Phase 7 -> Phase 8
-  connect('M6', ['R1']);
-  connect('R1', ['R2', 'R3', 'D3', 'D5']);
-  connect('R2', ['R4']);
-  connect('R3', ['R4']);
-  connect('R4', ['D1', 'D2', 'D5']);
-  connect('D1', ['D6']);
-  connect('D2', ['D6']);
-  connect('D3', ['D5', 'D6']);
-  connect('D4', ['D6']);
-
+function buildPhasesFromWorkflowNodes(
+  nodes: Array<{ id?: string; name?: string; type?: string }>,
+): WorkflowPhaseInfo[] {
   const phaseMeta: Array<{ phase: number; code: string; title: string; titleFa: string }> = [
     { phase: 1, code: 'S1', title: 'Triggers & Scheduling', titleFa: 'تریگرها و مدیریت زمان' },
     { phase: 2, code: 'S2', title: 'Macro Financial & FX Engine', titleFa: 'موتور ماکرو مالی و نرخ ارز' },
@@ -1010,48 +448,56 @@ function buildEnterprise54NodeWorkflow(config: EngineConfig): {
     { phase: 8, code: 'S8', title: 'Omnichannel Dispatch & Logging', titleFa: 'ارسال‌کننده‌ها و لاگرها' },
   ];
 
-  const phases: WorkflowPhaseInfo[] = phaseMeta.map((pm) => {
-    const phaseNodes = specs.filter((s) => s.phase === pm.phase);
+  return phaseMeta.map((pm) => {
+    const phaseNodes = nodes
+      .filter((n) => String(n.id || '').includes(`-s${pm.phase}-`))
+      .map((n) => {
+        const shortId = String(n.name || '').split('.')[0] || String(n.id || '');
+        return {
+          id: shortId,
+          name: String(n.name || shortId),
+          type: String(n.type || '').replace('n8n-nodes-base.', ''),
+          role: NODE_ROLE_MAP[shortId] || String(n.name || ''),
+        };
+      });
     return {
       ...pm,
       nodeCount: phaseNodes.length,
-      nodes: phaseNodes.map((n) => ({
-        id: n.id,
-        name: n.name,
-        type: n.type.replace('n8n-nodes-base.', ''),
-        role: n.role,
-      })),
+      nodes: phaseNodes,
     };
   });
-
-  return {
-    phases,
-    json: {
-      name: 'Enterprise 54-Node Black Friday 2026 Arbitrage Architecture',
-      active: false,
-      nodes: n8nNodes,
-      connections,
-      settings: { executionOrder: 'v1' },
-    },
-  };
 }
 
 function loadRepoWorkflows(): WorkflowAsset[] {
-  const enterprise54 = buildEnterprise54NodeWorkflow(engineConfig);
-  const assets: WorkflowAsset[] = [
-    {
-      id: 'enterprise-54-node-2026',
-      title: 'Enterprise 54-Node 8-Phase Architecture (2026 Master Spec)',
-      filename: 'enterprise_54_node_bf2026.json',
-      description:
-        'Full 54-node modular n8n blueprint with Canonical Data Schema, Ban Coverage classification, API Credit isolation, 4-branch grading (A+ / A / Manual Review / Drop), and 6-hour deduplication.',
-      nodeCount: (enterprise54.json.nodes as unknown[]).length,
-      triggerSchedule: 'Every 20m + Live Webhook + Reset Webhook + Nightly Cron',
-      streamsCovered: 'Physical Tech · Consumer AI Subscriptions · API Credit Gateways',
-      phases: enterprise54.phases,
-      json: enterprise54.json,
-    },
-  ];
+  const assets: WorkflowAsset[] = [];
+
+  try {
+    const enterprisePath = path.join(__dirname, 'enterprise_54_node_workflow.json');
+    if (fs.existsSync(enterprisePath)) {
+      const parsed = JSON.parse(fs.readFileSync(enterprisePath, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
+      const sanitized = sanitizeWorkflowJson(parsed);
+      const rawNodes = Array.isArray(sanitized.nodes)
+        ? (sanitized.nodes as Array<{ id?: string; name?: string; type?: string }>)
+        : [];
+      assets.push({
+        id: 'enterprise-54-node-2026',
+        title: 'Enterprise 54-Node 8-Phase Architecture (Audited & Production-Ready)',
+        filename: 'enterprise_54_node_workflow.json',
+        description:
+          'Audited 54-node modular n8n v2 blueprint with zero fan-in races, 1-to-1 per-SKU collectors, Canonical Data Schema, Ban Coverage disclosure, 4-branch grading (A+ / A / Manual Review / Drop), and 6-hour deduplication.',
+        nodeCount: rawNodes.length,
+        triggerSchedule: 'Every 20m + Live Webhook + Reset Webhook + Nightly Cron',
+        streamsCovered: 'Physical Tech · Consumer AI Subscriptions · API Credit Gateways',
+        phases: buildPhasesFromWorkflowNodes(rawNodes),
+        json: sanitized,
+      });
+    }
+  } catch {
+    // Skip if unreadable
+  }
 
   const repoFiles: Array<{
     id: string;
@@ -1128,20 +574,52 @@ async function startServer(): Promise<void> {
   app.post('/mcp/:service', async (req, res) => {
     const service = String(req.params.service || '').toLowerCase();
     const query = String(req.body?.query || 'آداپتور 20 وات اپل');
+    const qLower = query.toLowerCase();
     const fx = await fetchLiveFx(false);
 
-    const matchedItem = watchlist.find(
-      (w) =>
-        w.nameFa.includes(query) ||
-        w.nameEn.toLowerCase().includes(query.toLowerCase()) ||
-        (query.includes('اپل') && w.id === 'apple-20w-charger') ||
-        (query.toLowerCase().includes('dualsense') && w.id === 'ps5-dualsense') ||
-        (query.toLowerCase().includes('nvme') && w.id === 'nvme-1tb-pcie4') ||
-        (query.includes('آیفون') && w.id === 'used-iphone-13-c2c'),
-    );
+    const matchedItem =
+      watchlist.find(
+        (w) =>
+          (qLower.includes('ایرپاد') || qLower.includes('airpods')) &&
+          w.id === 'airpods-pro-2-fake-promo',
+      ) ||
+      watchlist.find(
+        (w) =>
+          (qLower.includes('اسلیم') || (qLower.includes('پلی استیشن 5') && !qLower.includes('دسته'))) &&
+          w.id === 'ps5-slim-overcap',
+      ) ||
+      watchlist.find(
+        (w) =>
+          (qLower.includes('آیفون 14') || qLower.includes('آیفون ۱۴') || qLower.includes('iphone 14')) &&
+          w.id === 'iphone-14-divar-manual-review',
+      ) ||
+      watchlist.find(
+        (w) =>
+          (qLower.includes('آیفون 13') || qLower.includes('آیفون ۱۳') || qLower.includes('iphone 13')) &&
+          w.id === 'used-iphone-13-c2c',
+      ) ||
+      watchlist.find(
+        (w) =>
+          (qLower.includes('dualsense') || qLower.includes('دسته')) && w.id === 'ps5-dualsense',
+      ) ||
+      watchlist.find(
+        (w) => (qLower.includes('nvme') || qLower.includes('ssd')) && w.id === 'nvme-1tb-pcie4',
+      ) ||
+      watchlist.find(
+        (w) =>
+          w.nameFa.includes(query) ||
+          w.nameEn.toLowerCase().includes(qLower) ||
+          ((qLower.includes('اپل') || qLower.includes('آداپتور') || qLower.includes('شارژر')) &&
+            w.id === 'apple-20w-charger'),
+      );
 
     const baseMarket = matchedItem?.marketBenchmarkToman ?? 1_850_000;
     const baseSale = matchedItem?.currency === 'TOMAN' ? matchedItem.sourceCost : 1_320_000;
+    const baseBefore =
+      matchedItem?.priceBeforeDiscountToman !== null &&
+      matchedItem?.priceBeforeDiscountToman !== undefined
+        ? matchedItem.priceBeforeDiscountToman
+        : Math.round(baseMarket * 1.02);
 
     if (service === 'tgju') {
       return res.json({
@@ -1168,8 +646,8 @@ async function startServer(): Promise<void> {
             price: baseMarket,
             stats: {
               median: baseMarket,
-              min: Math.round(baseMarket * 0.86),
-              max: Math.round(baseMarket * 1.14),
+              min: Math.round(baseMarket * 0.88),
+              max: Math.round(baseMarket * 1.12),
             },
           },
         ],
@@ -1177,7 +655,6 @@ async function startServer(): Promise<void> {
     }
 
     if (service === 'technolife') {
-      const before = Math.round(baseMarket * 1.02);
       return res.json({
         service: 'technolife',
         query,
@@ -1186,8 +663,8 @@ async function startServer(): Promise<void> {
             title: `${matchedItem ? matchedItem.nameFa : query} - حراجی بلک فرایدی`,
             price: baseSale,
             final_price: baseSale,
-            price_before_discount: before,
-            discount_pct: Math.max(0, Math.round(((before - baseSale) / before) * 100)),
+            price_before_discount: baseBefore,
+            discount_pct: Math.max(0, Math.round(((baseBefore - baseSale) / Math.max(1, baseBefore)) * 100)),
             in_stock: true,
             url: 'https://www.technolife.ir',
           },
@@ -1196,8 +673,8 @@ async function startServer(): Promise<void> {
     }
 
     if (service === 'digikala') {
-      const dkPrice = Math.round(baseSale * 1.04);
-      const before = Math.round(baseMarket * 1.05);
+      const dkPrice =
+        matchedItem?.id === 'airpods-pro-2-fake-promo' ? baseSale : Math.round(baseSale * 1.04);
       return res.json({
         service: 'digikala',
         query,
@@ -1205,8 +682,8 @@ async function startServer(): Promise<void> {
           {
             title: `${matchedItem ? matchedItem.nameFa : query} گارانتی اصالت کالا`,
             price: dkPrice,
-            price_before_discount: before,
-            discount_pct: Math.max(0, Math.round(((before - dkPrice) / before) * 100)),
+            price_before_discount: baseBefore,
+            discount_pct: Math.max(0, Math.round(((baseBefore - dkPrice) / Math.max(1, baseBefore)) * 100)),
             in_stock: true,
             url: 'https://www.digikala.com',
           },
@@ -1215,19 +692,22 @@ async function startServer(): Promise<void> {
     }
 
     if (service === 'divar') {
+      const isSuspicious =
+        matchedItem?.id === 'iphone-14-divar-manual-review' ||
+        qLower.includes('14') ||
+        qLower.includes('۱۴');
+      const primaryPrice = isSuspicious
+        ? Math.min(baseSale, Math.round(baseMarket * 0.31))
+        : matchedItem?.isC2C
+          ? baseSale
+          : Math.round(baseMarket * 0.78);
       return res.json({
         service: 'divar',
         query,
         ads: [
           {
             title: `${matchedItem ? matchedItem.nameFa : query} در حد آکبند با فاکتور`,
-            price: Math.round(baseMarket * 0.78),
-            tag: 'فوری',
-            url: 'https://divar.ir',
-          },
-          {
-            title: `${matchedItem ? matchedItem.nameFa : query} زیر قیمت بازار (صف بررسی دستی)`,
-            price: Math.round(baseMarket * 0.31),
+            price: primaryPrice,
             tag: 'فوری',
             url: 'https://divar.ir',
           },

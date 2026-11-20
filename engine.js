@@ -1,119 +1,131 @@
-// engine.js - موتور هوشمند سنجش قیمت و سود واقعی بلک‌فرایدی
-const fs = require('fs');
+// engine.js - Live Black Friday 2026 Dual-Engine Arbitrage Calculator (ESM)
+import fs from 'node:fs';
 
 async function getLiveUsdtPrice() {
   try {
-    const res = await fetch('https://api.wallex.ir/v1/markets', { signal: AbortSignal.timeout(5000) });
+    const res = await fetch('https://api.wallex.ir/v1/markets', {
+      signal: AbortSignal.timeout(5000),
+    });
     const data = await res.json();
     const price = parseFloat(data?.result?.symbols?.USDTTMN?.stats?.lastPrice);
-    if (price && !isNaN(price)) return Math.round(price);
-  } catch (err) {
-    console.warn('⚠️ خطا در دریافت نرخ لحظه‌ای والکس، نرخ تتر روی ۲۷۰,۰۰۰ تومان تنظیم شد.');
+    if (price && !Number.isNaN(price)) return Math.round(price);
+  } catch {
+    console.warn('⚠️ خطا در دریافت نرخ لحظه‌ای والکس، نرخ تتر روی ۲۷۲,۱۰۰ تومان تنظیم شد.');
   }
-  return 270000; // نرخ پیش‌فرض تتر به تومان در سال ۲۰۲۶
+  return 272100;
 }
 
-// دیتابیس واقعی کالاها و اشتراک‌ها با قیمت‌های روز ۲۰۲۶
 const targetWatchlist = [
   {
     id: 'chatgpt-plus',
+    product_type: 'consumer_subscription',
     name: 'ChatGPT Plus (اکانت اختصاصی ماهانه)',
-    category: 'دیجیتال / هوش مصنوعی',
+    category: 'اشتراک مصرف‌کننده / هوش مصنوعی',
     source: 'AIPAY99 (شبکه BEP20 با متامسک)',
     currency: 'USDT',
-    cost: 18.80,
-    // قیمت فروش روز در ایران در سال ۲۰۲۶ متناسب با دلار ۲۷۰ هزار تومانی:
-    marketSellPriceToman: 5950000,
-    networkFeeUsd: 0.15
+    cost: 18.8,
+    marketSellPriceToman: 6150000,
+    networkFeeUsd: 0.15,
+    ban_coverage: 'excluded',
   },
   {
     id: 'claude-pro',
+    product_type: 'consumer_subscription',
     name: 'Claude Pro (اشتراک اختصاصی ماهانه)',
-    category: 'دیجیتال / هوش مصنوعی',
+    category: 'اشتراک مصرف‌کننده / هوش مصنوعی',
     source: 'AIPAY99 / متامسک',
     currency: 'USDT',
-    cost: 25.50,
-    marketSellPriceToman: 7900000,
-    networkFeeUsd: 0.15
+    cost: 25.5,
+    marketSellPriceToman: 7500000,
+    networkFeeUsd: 0.15,
+    ban_coverage: 'excluded',
   },
   {
     id: 'cursor-pro',
+    product_type: 'consumer_subscription',
     name: 'Cursor Pro (اشتراک توسعه‌دهندگان AI)',
-    category: 'دیجیتال / برنامه‌نویسی',
+    category: 'اشتراک مصرف‌کننده / برنامه‌نویسی',
     source: 'suzhe.ai / تأمین کریپتو',
     currency: 'USDT',
-    cost: 16.00,
-    marketSellPriceToman: 5100000,
-    networkFeeUsd: 0.15
+    cost: 16.0,
+    marketSellPriceToman: 5450000,
+    networkFeeUsd: 0.15,
+    ban_coverage: 'unknown',
   },
   {
     id: 'apple-20w-charger',
+    product_type: 'physical_tech',
     name: 'شارژر ۲۰ وات اورجینال اپل (پارت B/A اصلی)',
-    category: 'فیزیکی / اکسسوری استور',
-    source: 'حراجی تأمین‌کننده بازار تهران / بلک‌فرایدی',
+    category: 'فیزیکی / اکسسوری اپل',
+    source: 'تکنولایف / حراجی بلک‌فرایدی',
     currency: 'TOMAN',
     cost: 1320000,
     marketSellPriceToman: 1850000,
-    networkFeeUsd: 0
+    networkFeeUsd: 0,
+    ban_coverage: 'supported',
   },
   {
     id: 'ps5-dualsense',
+    product_type: 'physical_tech',
     name: 'دسته پلی‌استیشن ۵ DualSense (سفید/مشکی)',
     category: 'فیزیکی / گیمینگ',
-    source: 'فلش‌سیل داخلی',
+    source: 'دیجی‌کالا / فلش‌سیل داخلی',
     currency: 'TOMAN',
     cost: 3650000,
     marketSellPriceToman: 4400000,
-    networkFeeUsd: 0
-  }
+    networkFeeUsd: 0,
+    ban_coverage: 'supported',
+  },
+  {
+    id: 'nvme-1tb-pcie4',
+    product_type: 'physical_tech',
+    name: 'اس‌اس‌دی ۱ ترابایت NVMe PCIe 4.0',
+    category: 'فیزیکی / سخت‌افزار PC',
+    source: 'تکنولایف / کمپین ذخیره‌ساز',
+    currency: 'TOMAN',
+    cost: 23500000,
+    marketSellPriceToman: 29800000,
+    networkFeeUsd: 0,
+    ban_coverage: 'supported',
+  },
 ];
 
 async function runArbitrageEngine() {
-  console.log('🚀 در حال اجرای زنده موتور شکار فرصت‌های بلک‌فرایدی...\n');
+  console.log('🚀 در حال اجرای زنده موتور شکار فرصت‌های بلک‌فرایدی ۲۰۲۶...\n');
   const usdtRate = await getLiveUsdtPrice();
   console.log(`💵 نرخ استعلام‌شده تتر (والکس): ${Number(usdtRate).toLocaleString('fa-IR')} تومان\n`);
-  console.log('='.repeat(65));
 
   const opportunities = [];
 
   for (const item of targetWatchlist) {
-    let costInToman = 0;
-    if (item.currency === 'TOMAN') {
-      costInToman = item.cost;
-    } else if (item.currency === 'USDT') {
-      const totalUsdt = item.cost + item.networkFeeUsd;
-      costInToman = Math.round(totalUsdt * usdtRate);
-    }
+    const costInToman =
+      item.currency === 'TOMAN'
+        ? item.cost
+        : Math.round((item.cost + item.networkFeeUsd) * usdtRate);
 
     const netProfit = item.marketSellPriceToman - costInToman;
-    const margin = ((netProfit / costInToman) * 100).toFixed(1);
-
-    const isDeal = margin >= 12.0;
+    const margin = Number(((netProfit / costInToman) * 100).toFixed(1));
+    const dealGrade = margin >= 30 ? 'A+' : margin >= 18 ? 'A' : 'DROP';
+    const isDeal = dealGrade !== 'DROP';
 
     const result = {
       ...item,
       costInToman,
       netProfit,
-      margin: parseFloat(margin),
-      isDeal
+      margin,
+      dealGrade,
+      isDeal,
     };
 
-    if (isDeal) {
-      opportunities.push(result);
-    }
+    if (isDeal) opportunities.push(result);
 
-    const badge = isDeal ? '🎯 [شکار سودآور]' : '⏳ [سود معمولی]';
-    console.log(`${badge} ${item.name}`);
-    console.log(`   منبع: ${item.source}`);
-    console.log(`   قیمت تمام‌شده: ${Number(costInToman).toLocaleString('fa-IR')} تومان`);
-    console.log(`   قیمت فروش در بازار: ${Number(item.marketSellPriceToman).toLocaleString('fa-IR')} تومان`);
-    console.log(`   سود خالص: ${Number(netProfit).toLocaleString('fa-IR')} تومان (${margin}٪ حاشیه سود)`);
-    console.log('-'.repeat(65));
+    console.log(
+      `[${dealGrade}] ${item.name} | Cost: ${costInToman.toLocaleString('en-US')} TMN | Margin: ${margin}% | Ban: ${item.ban_coverage}`,
+    );
   }
 
-  console.log(`\n✅ کل موقعیت‌های سودآور تأییدشده: ${opportunities.length} مورد`);
   fs.writeFileSync('active_deals.json', JSON.stringify(opportunities, null, 2));
-  console.log('📁 فایل فرصت‌های فعال در active_deals.json بروزرسانی شد.');
+  console.log(`\n✅ کل موقعیت‌های سودآور تأییدشده (>=18%): ${opportunities.length} مورد`);
 }
 
 runArbitrageEngine();

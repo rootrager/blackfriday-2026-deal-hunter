@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpDown,
   CheckCircle2,
@@ -65,6 +65,15 @@ export const RadarOverviewView: React.FC<RadarOverviewViewProps> = ({
   const [usdtOverride, setUsdtOverride] = useState(String(state.fx.usdtToman));
   const [useLiveUsdt, setUseLiveUsdt] = useState(state.config.useLiveUsdt);
   const [applyingConfig, setApplyingConfig] = useState(false);
+
+  useEffect(() => {
+    setBudgetM(String(Math.round(state.config.budgetToman / 1_000_000)));
+    setCapM(String(Math.round(state.config.maxItemCommitmentToman / 1_000_000)));
+    setMinMargin(String(state.config.minMarginPct));
+    setGoldenMargin(String(state.config.goldenMarginPct));
+    setUseLiveUsdt(state.config.useLiveUsdt);
+    setUsdtOverride(String(state.config.useLiveUsdt ? state.fx.usdtToman : state.config.manualUsdtToman));
+  }, [state.config, state.fx.usdtToman]);
 
   const filteredDeals = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

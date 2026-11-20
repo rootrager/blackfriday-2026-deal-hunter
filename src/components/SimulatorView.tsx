@@ -37,7 +37,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ deals, config, fx 
       for (const item of digitalDeals) {
         const feeMul = 1 + (item.gatewayFeePct ?? 0) / 100;
         const costTmn = (item.sourceCost * feeMul + item.networkFeeUsd) * rate;
-        const margin = ((item.marketBenchmarkToman - costTmn) / costTmn) * 100;
+        const margin = costTmn > 0 ? ((item.marketBenchmarkToman - costTmn) / costTmn) * 100 : 0;
         row[item.id] = Number(margin.toFixed(1));
       }
       points.push(row);
@@ -104,7 +104,7 @@ export const SimulatorView: React.FC<SimulatorViewProps> = ({ deals, config, fx 
     };
   }, [deals, config, physicalSharePct]);
 
-  const lineColors = ['#0f172a', '#059669', '#2563eb', '#d97706'];
+  const lineColors = ['#0f172a', '#059669', '#2563eb', '#d97706', '#7c3aed', '#dc2626'];
 
   return (
     <div className="space-y-8">
